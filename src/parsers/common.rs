@@ -68,6 +68,8 @@ pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>,
             for _ in 0..sample as usize {
                 deriv.push(b);
             }
+            a = f32::NAN;
+            b = f32::NAN;
         } else {
             deriv.push(sample);
         }

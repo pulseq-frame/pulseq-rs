@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 pub mod common;
+pub mod pulseq_1_3_1;
 pub mod pulseq_1_4_0;
 
 // Pulseq is parsed into the following structs, which are modelled after the
@@ -17,6 +18,7 @@ pub enum Section {
     Gradients(Vec<Gradient>),
     Traps(Vec<Trap>),
     Adcs(Vec<Adc>),
+    Delays(Vec<Delay>),
     Extensions(Extensions),
     Shapes(Vec<Shape>),
 }
@@ -36,27 +38,42 @@ pub struct Signature {
 }
 
 #[derive(Debug)]
-pub struct Definitions {
-    grad_raster: f32,
-    rf_raster: f32,
-    adc_raster: f32,
-    block_dur_raster: f32,
-    name: Option<String>,
-    fov: Option<(f32, f32, f32)>,
-    total_duration: Option<f32>,
-    rest: HashMap<String, String>,
+pub enum Definitions {
+    V131(HashMap<String, String>),
+    V140 {
+        grad_raster: f32,
+        rf_raster: f32,
+        adc_raster: f32,
+        block_dur_raster: f32,
+        name: Option<String>,
+        fov: Option<(f32, f32, f32)>,
+        total_duration: Option<f32>,
+        rest: HashMap<String, String>,
+    },
 }
 
 #[derive(Debug)]
-pub struct Block {
-    id: u32,
-    duration: u32,
-    rf: u32,
-    gx: u32,
-    gy: u32,
-    gz: u32,
-    adc: u32,
-    ext: u32,
+pub enum Block {
+    V131 {
+        id: u32,
+        delay: u32,
+        rf: u32,
+        gx: u32,
+        gy: u32,
+        gz: u32,
+        adc: u32,
+        ext: u32,
+    },
+    V140 {
+        id: u32,
+        duration: u32,
+        rf: u32,
+        gx: u32,
+        gy: u32,
+        gz: u32,
+        adc: u32,
+        ext: u32,
+    },
 }
 
 #[derive(Debug)]
@@ -113,6 +130,13 @@ pub struct Adc {
     freq: f32,
     /// `rad`
     phase: f32,
+}
+
+#[derive(Debug)]
+pub struct Delay {
+    id: u32,
+    /// `s` (from pulseq: `us`)
+    delay: f32,
 }
 
 #[derive(Debug)]

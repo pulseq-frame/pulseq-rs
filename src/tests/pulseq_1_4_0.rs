@@ -11,6 +11,11 @@ fn epi_se_rs() {
     assert!(file().parse_all(&source).is_ok());
 }
 #[test]
+fn epi_se() {
+    let source = std::fs::read_to_string("assets/1.4.0/epi_se.seq").unwrap();
+    assert!(file().parse_all(&source).is_ok());
+}
+#[test]
 fn epi() {
     let source = std::fs::read_to_string("assets/1.4.0/epi.seq").unwrap();
     assert!(file().parse_all(&source).is_ok());
