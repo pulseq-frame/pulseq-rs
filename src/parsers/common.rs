@@ -38,7 +38,7 @@ pub fn ident() -> Parser<impl Parse<Output = String>> {
         .map(|s| s.to_owned())
 }
 
-pub fn integer() -> Parser<impl Parse<Output = u32>> {
+pub fn int() -> Parser<impl Parse<Output = u32>> {
     (tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..))).try_map(|s| s.parse())
 }
 
@@ -51,10 +51,6 @@ pub fn float() -> Parser<impl Parse<Output = f32>> {
 }
 
 pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
-    if samples.len() as u32 == num_samples {
-        return Ok(samples);
-    }
-
     // First, decompress into the deriviate of the shape
     let mut deriv = Vec::with_capacity(num_samples as usize);
 

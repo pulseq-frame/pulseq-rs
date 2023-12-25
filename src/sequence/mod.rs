@@ -54,7 +54,7 @@ pub enum Gradient {
         fall: f32,
         /// Unit: `[s]`
         delay: f32,
-    }
+    },
 }
 
 pub struct Adc {

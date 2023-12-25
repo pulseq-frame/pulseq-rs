@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 pub mod common;
-pub mod pulseq_1_3_1;
-pub mod pulseq_1_4_0;
+pub mod pulseq_1_3;
+pub mod pulseq_1_4;
+pub mod pulseq_all;
 
 // Pulseq is parsed into the following structs, which are modelled after the
 // newest supported pulseq version. Older versions need to convert the data.

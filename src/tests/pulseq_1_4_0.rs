@@ -1,4 +1,4 @@
-use crate::parsers::pulseq_1_4_0::file;
+use crate::parsers::pulseq_1_4::file;
 
 #[test]
 fn epi_label() {

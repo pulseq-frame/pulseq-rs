@@ -1,4 +1,4 @@
-use crate::parsers::pulseq_1_3_1::file;
+use crate::parsers::pulseq_1_3::file;
 
 #[test]
 fn epi_se_rs() {
