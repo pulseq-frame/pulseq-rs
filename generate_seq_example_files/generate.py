@@ -9,12 +9,17 @@ def shell(*args):
     subprocess.Popen(list(args)).wait()
 
 
-# All versions available on PyPI
-# versions = ["1.0.0", "1.0.0.post1", "1.2.0.post1", "1.2.0.post2",
-#             "1.2.0.post3", "1.2.0.post4", "1.3.1", "1.3.1.post1", "1.4.0"]
+# We test the parser on the example sequences provided by PyPulseq.
 
-# Older pulseq versions don't include the example sequences in the pip install
-# We don't need all bugfix versions.
+# Versions available on PyPI:
+# 1.0.0, 1.0.0.post1,
+# 1.2.0.post1, 1.2.0.post2, 1.2.0.post3, 1.2.0.post4,
+# 1.3.1, 1.3.1.post1,
+# 1.4.0
+
+# Only the newest verions include their example scripts. The only backwards-
+# incompatible changes in the file format were between 1.3 and 1.4, so testing
+# those two versions should be sufficient.
 versions = ["1.3.1.post1", "1.4.0"]
 
 cwd = path.dirname(__file__)

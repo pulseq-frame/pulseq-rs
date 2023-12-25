@@ -8,6 +8,17 @@ pub mod pulseq_1_4_0;
 // newest supported pulseq version. Older versions need to convert the data.
 // This way, other code doesn't need to deal with version differences.
 
+// Pulseq file format changes:
+// v1.2: * Earliest tagged version on git and that we support
+// v1.3: * Introduced extensions - Blocks are extended by one additional ID
+// v1.4: * Removed Delay events - second value in Block changed from a delay ID
+//         to the duration of the Block (in multiples of the block_dur_raster)
+//       * Rf and Gradient now have an optional time_id for time shapes
+//       * Also added mandatory definitions. Spec defines FOV units to be meters
+//       * Shapes can be compressed
+// vPtx: * Rf extended by two shape IDs for mag and phase shim arrays
+//         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
+
 #[derive(Debug)]
 pub enum Section {
     Version(Version),
