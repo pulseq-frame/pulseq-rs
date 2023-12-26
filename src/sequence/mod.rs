@@ -1,7 +1,9 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
 use std::rc::Rc;
+use std::io::Write;
 
 mod from_1_4;
+mod display;
 
 #[test]
 fn epi_se_rs() {
@@ -10,6 +12,9 @@ fn epi_se_rs() {
         .parse_all(&source)
         .unwrap();
     let seq = Sequence::from_1_4(sections);
+
+    let mut out = std::fs::File::create("assets/epi_se_rs.seq.dump").unwrap();
+    write!(out, "{seq}").unwrap();
 }
 
 pub struct Sequence {
