@@ -90,58 +90,58 @@ pub enum Block {
 
 #[derive(Debug)]
 pub struct Rf {
-    id: u32,
+    pub id: u32,
     /// `Hz`
-    amp: f32,
-    mag_id: u32,
-    phase_id: u32,
-    time_id: u32,
+    pub amp: f32,
+    pub mag_id: u32,
+    pub phase_id: u32,
+    pub time_id: u32,
     /// `s` (from pulseq: `us`)
-    delay: f32,
+    pub delay: f32,
     /// `Hz`
-    freq: f32,
+    pub freq: f32,
     /// `rad`
-    phase: f32,
+    pub phase: f32,
 }
 
 #[derive(Debug)]
 pub struct Gradient {
-    id: u32,
+    pub id: u32,
     /// `Hz/m`
-    amp: f32,
-    shape_id: u32,
-    time_id: u32,
+    pub amp: f32,
+    pub shape_id: u32,
+    pub time_id: u32,
     /// `s` (from pulseq: `us`)
-    delay: f32,
+    pub delay: f32,
 }
 
 #[derive(Debug)]
 pub struct Trap {
-    id: u32,
+    pub id: u32,
     /// `Hz/m`
-    amp: f32,
+    pub amp: f32,
     /// `s` (from pulseq: `us`)
-    rise: f32,
+    pub rise: f32,
     /// `s` (from pulseq: `us`)
-    flat: f32,
+    pub flat: f32,
     /// `s` (from pulseq: `us`)
-    fall: f32,
+    pub fall: f32,
     /// `s` (from pulseq: `us`)
-    delay: f32,
+    pub delay: f32,
 }
 
 #[derive(Debug)]
 pub struct Adc {
-    id: u32,
-    num: u32,
+    pub id: u32,
+    pub num: u32,
     /// `s` (from pulseq: `ns`)
-    dwell: f32,
+    pub dwell: f32,
     /// `s` (from pulseq: `us`)
-    delay: f32,
+    pub delay: f32,
     /// `Hz`
-    freq: f32,
+    pub freq: f32,
     /// `rad`
-    phase: f32,
+    pub phase: f32,
 }
 
 #[derive(Debug)]
@@ -180,6 +180,6 @@ pub struct ExtensionObject {
 
 #[derive(Debug)]
 pub struct Shape {
-    id: u32,
-    samples: Vec<f32>,
+    pub id: u32,
+    pub samples: Vec<f32>,
 }
