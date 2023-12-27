@@ -18,44 +18,44 @@ fn epi_se_rs() {
 }
 
 pub struct Sequence {
-    metadata: Metadata,
-    blocks: Vec<Block>,
+    pub metadata: Metadata,
+    pub blocks: Vec<Block>,
 }
 
 pub struct Metadata {
-    name: Option<String>,
-    fov: Option<(f32, f32, f32)>,
+    pub name: Option<String>,
+    pub fov: Option<(f32, f32, f32)>,
     // Raster times are needed if time shapes are used.
     // These times are required by the 1.4+ parser, so if time shapes are used
     // but these values are None, it is a bug in the conversion process.
-    grad_raster: Option<f32>,
-    rf_raster: Option<f32>,
+    pub grad_raster: Option<f32>,
+    pub rf_raster: Option<f32>,
 }
 
 pub struct Block {
     /// Blocks are stored in a simple vector, isntead of a HashMap with their ID
     /// as value, because they are not referenced but executed top to bottom.
     /// Its own ID is stored inside of the Block for error reporting.
-    id: u32,
-    duration: f32,
-    rf: Option<Rc<Rf>>,
-    gx: Option<Rc<Gradient>>,
-    gy: Option<Rc<Gradient>>,
-    gz: Option<Rc<Gradient>>,
-    adc: Option<Rc<Adc>>,
+    pub id: u32,
+    pub duration: f32,
+    pub rf: Option<Rc<Rf>>,
+    pub gx: Option<Rc<Gradient>>,
+    pub gy: Option<Rc<Gradient>>,
+    pub gz: Option<Rc<Gradient>>,
+    pub adc: Option<Rc<Adc>>,
 }
 
 pub struct Rf {
     /// Unit: `[Hz]`
-    amp: f32,
+    pub amp: f32,
     /// Unit: `[rad]`
-    phase: f32,
-    amp_shape: Rc<Shape>,
-    phase_shape: Rc<Shape>,
+    pub phase: f32,
+    pub amp_shape: Rc<Shape>,
+    pub phase_shape: Rc<Shape>,
     /// Unit: `[s]`
-    delay: f32,
+    pub delay: f32,
     /// Unit: `[Hz]`
-    freq: f32,
+    pub freq: f32,
 }
 
 pub enum Gradient {
@@ -82,15 +82,15 @@ pub enum Gradient {
 }
 
 pub struct Adc {
-    num: u32,
+    pub num: u32,
     /// Unit: `[s]`
-    dwell: f32,
+    pub dwell: f32,
     /// Unit: `[s]`
-    delay: f32,
+    pub delay: f32,
     /// Unit: `[Hz]`
-    freq: f32,
+    pub freq: f32,
     /// Unit: `[rad]`
-    phase: f32,
+    pub phase: f32,
 }
 
-pub struct Shape(Vec<f32>);
+pub struct Shape(pub Vec<f32>);
