@@ -2,7 +2,7 @@
 use std::rc::Rc;
 use std::io::Write;
 
-mod from_1_4;
+pub mod from_1_4;
 mod display;
 
 #[test]

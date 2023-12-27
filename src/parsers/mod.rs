@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use self::common::ParseError;
+
 pub mod common;
 pub mod pulseq_1_3;
 pub mod pulseq_1_4;
@@ -19,6 +21,17 @@ pub mod pulseq_all;
 //       * Shapes can be compressed
 // vPtx: * Rf extended by two shape IDs for mag and phase shim arrays
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
+
+pub fn parse_file(source: &str) -> Result<Vec<Section>, ParseError> {
+    let parser = common::nl().opt() + pulseq_all::raw_version() + ezpc::none_of("").repeat(0..);
+    let version = parser.parse_all(source).map_err(|_| ParseError::Generic)?;
+
+    match version {
+        Version { major: 1, minor: 3, ..} => pulseq_1_3::file().parse_all(source).map_err(|_| ParseError::Generic),
+        Version { major: 1, minor: 4, ..} => pulseq_1_4::file().parse_all(source).map_err(|_| ParseError::Generic),
+        _ => Err(ParseError::Generic)
+    }
+}
 
 #[derive(Debug)]
 pub enum Section {
