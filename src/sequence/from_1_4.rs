@@ -74,7 +74,7 @@ impl Sequence {
         // NOTE: if some ID exists more than once in the file, we overwrite it.
 
         let shapes: HashMap<_, _> = extract_iter!(sections, Shapes)
-            .map(|shape| (shape.id, Rc::new(Shape(shape.samples))))
+            .map(|shape| (shape.id, Arc::new(Shape(shape.samples))))
             .collect();
 
         // NOTE: It might be better to convert, e.g.: us to s, here instead of
@@ -84,7 +84,7 @@ impl Sequence {
             .map(|adc| {
                 (
                     adc.id,
-                    Rc::new(Adc {
+                    Arc::new(Adc {
                         num: adc.num,
                         dwell: adc.dwell,
                         delay: adc.delay,
@@ -99,7 +99,7 @@ impl Sequence {
             .map(|grad| {
                 (
                     grad.id,
-                    Rc::new(Gradient::Free {
+                    Arc::new(Gradient::Free {
                         amp: grad.amp,
                         shape: shapes[&grad.shape_id].clone(),
                         time: if grad.time_id == 0 {
@@ -114,7 +114,7 @@ impl Sequence {
             .chain(extract_iter!(sections, Traps).map(|trap| {
                 (
                     trap.id,
-                    Rc::new(Gradient::Trap {
+                    Arc::new(Gradient::Trap {
                         amp: trap.amp,
                         rise: trap.rise,
                         flat: trap.flat,
@@ -129,7 +129,7 @@ impl Sequence {
             .map(|rf| {
                 (
                     rf.id,
-                    Rc::new(Rf {
+                    Arc::new(Rf {
                         amp: rf.amp,
                         phase: rf.phase,
                         amp_shape: shapes[&rf.mag_id].clone(),

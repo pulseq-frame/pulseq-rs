@@ -27,9 +27,17 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, ParseError> {
     let version = parser.parse_all(source).map_err(|_| ParseError::Generic)?;
 
     match version {
-        Version { major: 1, minor: 3, ..} => pulseq_1_3::file().parse_all(source).map_err(|_| ParseError::Generic),
-        Version { major: 1, minor: 4, ..} => pulseq_1_4::file().parse_all(source).map_err(|_| ParseError::Generic),
-        _ => Err(ParseError::Generic)
+        Version {
+            major: 1, minor: 3, ..
+        } => pulseq_1_3::file()
+            .parse_all(source)
+            .map_err(|_| ParseError::Generic),
+        Version {
+            major: 1, minor: 4, ..
+        } => pulseq_1_4::file()
+            .parse_all(source)
+            .map_err(|_| ParseError::Generic),
+        _ => Err(ParseError::Generic),
     }
 }
 

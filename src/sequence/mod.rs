@@ -1,9 +1,9 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::rc::Rc;
 use std::io::Write;
+use std::sync::Arc;
 
-pub mod from_1_4;
 mod display;
+pub mod from_1_4;
 
 #[test]
 fn epi_se_rs() {
@@ -38,11 +38,11 @@ pub struct Block {
     /// Its own ID is stored inside of the Block for error reporting.
     pub id: u32,
     pub duration: f32,
-    pub rf: Option<Rc<Rf>>,
-    pub gx: Option<Rc<Gradient>>,
-    pub gy: Option<Rc<Gradient>>,
-    pub gz: Option<Rc<Gradient>>,
-    pub adc: Option<Rc<Adc>>,
+    pub rf: Option<Arc<Rf>>,
+    pub gx: Option<Arc<Gradient>>,
+    pub gy: Option<Arc<Gradient>>,
+    pub gz: Option<Arc<Gradient>>,
+    pub adc: Option<Arc<Adc>>,
 }
 
 pub struct Rf {
@@ -50,8 +50,8 @@ pub struct Rf {
     pub amp: f32,
     /// Unit: `[rad]`
     pub phase: f32,
-    pub amp_shape: Rc<Shape>,
-    pub phase_shape: Rc<Shape>,
+    pub amp_shape: Arc<Shape>,
+    pub phase_shape: Arc<Shape>,
     /// Unit: `[s]`
     pub delay: f32,
     /// Unit: `[Hz]`
@@ -62,8 +62,8 @@ pub enum Gradient {
     Free {
         /// Unit: `[Hz/m]`
         amp: f32,
-        shape: Rc<Shape>,
-        time: Option<Rc<Shape>>,
+        shape: Arc<Shape>,
+        time: Option<Arc<Shape>>,
         /// Unit: `[s]`
         delay: f32,
     },
