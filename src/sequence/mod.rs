@@ -1,21 +1,9 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::io::Write;
 use std::sync::Arc;
 
 mod display;
 pub mod from_1_4;
 
-#[test]
-fn epi_se_rs() {
-    let source = std::fs::read_to_string("assets/1.4.0/epi_se_rs.seq").unwrap();
-    let sections = crate::parsers::pulseq_1_4::file()
-        .parse_all(&source)
-        .unwrap();
-    let seq = Sequence::from_1_4(sections);
-
-    let mut out = std::fs::File::create("assets/epi_se_rs.seq.dump").unwrap();
-    write!(out, "{seq}").unwrap();
-}
 
 pub struct Sequence {
     pub metadata: Metadata,
