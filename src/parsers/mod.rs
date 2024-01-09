@@ -83,27 +83,21 @@ pub struct Definitions {
 }
 
 #[derive(Debug)]
-pub enum Block {
-    V131 {
-        id: u32,
-        delay: u32,
-        rf: u32,
-        gx: u32,
-        gy: u32,
-        gz: u32,
-        adc: u32,
-        ext: u32,
-    },
-    V140 {
-        id: u32,
-        duration: u32,
-        rf: u32,
-        gx: u32,
-        gy: u32,
-        gz: u32,
-        adc: u32,
-        ext: u32,
-    },
+pub enum BlockDuration {
+    Duration(u32),
+    DelayId(u32),
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub id: u32,
+    pub dur: BlockDuration,
+    pub rf: u32,
+    pub gx: u32,
+    pub gy: u32,
+    pub gz: u32,
+    pub adc: u32,
+    pub ext: u32,
 }
 
 #[derive(Debug)]

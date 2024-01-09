@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parsers::{helpers::ParseError, Section};
+use crate::parsers::{helpers::ParseError, BlockDuration, Section};
 
 use super::*;
 
@@ -168,83 +168,51 @@ fn convert_block(
     delays: &HashMap<u32, f32>,
     time_raster: &TimeRaster,
 ) -> Result<Block, ParseError> {
-    Ok(match block {
-        crate::parsers::Block::V131 {
-            id,
-            delay,
-            rf,
-            gx,
-            gy,
-            gz,
-            adc,
-            ext: _,
-        } => {
-            let rf = (rf != 0)
-                .then(|| rfs.get(&rf).cloned().ok_or(ParseError::Generic))
-                .transpose()?;
-            let gx = (gx != 0)
-                .then(|| gradients.get(&gx).cloned().ok_or(ParseError::Generic))
-                .transpose()?;
-            let gy = (gy != 0)
-                .then(|| gradients.get(&gy).cloned().ok_or(ParseError::Generic))
-                .transpose()?;
-            let gz = (gz != 0)
-                .then(|| gradients.get(&gz).cloned().ok_or(ParseError::Generic))
-                .transpose()?;
-            let adc = (adc != 0)
-                .then(|| adcs.get(&adc).cloned().ok_or(ParseError::Generic))
-                .transpose()?;
+    let rf = (block.rf != 0)
+        .then(|| rfs.get(&block.rf).cloned().ok_or(ParseError::Generic))
+        .transpose()?;
+    let gx = (block.gx != 0)
+        .then(|| gradients.get(&block.gx).cloned().ok_or(ParseError::Generic))
+        .transpose()?;
+    let gy = (block.gy != 0)
+        .then(|| gradients.get(&block.gy).cloned().ok_or(ParseError::Generic))
+        .transpose()?;
+    let gz = (block.gz != 0)
+        .then(|| gradients.get(&block.gz).cloned().ok_or(ParseError::Generic))
+        .transpose()?;
+    let adc = (block.adc != 0)
+        .then(|| adcs.get(&block.adc).cloned().ok_or(ParseError::Generic))
+        .transpose()?;
+
+    let duration = match block.dur {
+        BlockDuration::Duration(dur) => dur as f32 * time_raster.block,
+        BlockDuration::DelayId(delay) => {
             let delay = (delay != 0)
                 .then(|| delays.get(&delay).cloned().ok_or(ParseError::Generic))
                 .transpose()?;
 
-            let mut duration: f32 = 0.0;
-            if let Some(rf) = &rf {
-                duration = duration.max(rf.duration(time_raster.rf));
-            }
-            if let Some(gx) = &gx {
-                duration = duration.max(gx.duration(time_raster.grad));
-            }
-            if let Some(gy) = &gy {
-                duration = duration.max(gy.duration(time_raster.grad));
-            }
-            if let Some(gz) = &gz {
-                duration = duration.max(gz.duration(time_raster.grad));
-            }
-            if let Some(adc) = &adc {
-                duration = duration.max(adc.duration());
-            }
-            if let Some(delay) = delay {
-                duration = duration.max(delay);
-            }
-
-            Block {
-                id,
-                duration,
-                rf,
-                gx,
-                gy,
-                gz,
-                adc,
-            }
+            [
+                rf.as_ref().map(|rf| rf.duration(time_raster.rf)),
+                gx.as_ref().map(|gx| gx.duration(time_raster.grad)),
+                gy.as_ref().map(|gy| gy.duration(time_raster.grad)),
+                gz.as_ref().map(|gz| gz.duration(time_raster.grad)),
+                adc.as_ref().map(|adc| adc.duration()),
+                delay,
+            ]
+            .into_iter()
+            .flatten()
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0)
         }
-        crate::parsers::Block::V140 {
-            id,
-            duration,
-            rf,
-            gx,
-            gy,
-            gz,
-            adc,
-            ext: _,
-        } => Block {
-            id,
-            duration: duration as f32 * time_raster.block,
-            rf: (rf != 0).then(|| rfs[&rf].clone()),
-            gx: (gx != 0).then(|| gradients[&gx].clone()),
-            gy: (gy != 0).then(|| gradients[&gy].clone()),
-            gz: (gz != 0).then(|| gradients[&gz].clone()),
-            adc: (adc != 0).then(|| adcs[&adc].clone()),
-        },
+    };
+
+    Ok(Block {
+        id: block.id,
+        duration,
+        rf,
+        gx,
+        gy,
+        gz,
+        adc,
     })
 }

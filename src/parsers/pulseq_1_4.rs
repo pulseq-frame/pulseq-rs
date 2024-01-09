@@ -61,9 +61,9 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
 }
 
 fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
-    let block = (ws().opt() + int() + (ws() + int()).repeat(7)).map(|(id, tags)| Block::V140 {
+    let block = (ws().opt() + int() + (ws() + int()).repeat(7)).map(|(id, tags)| Block {
         id,
-        duration: tags[0],
+        dur: BlockDuration::Duration(tags[0]),
         rf: tags[1],
         gx: tags[2],
         gy: tags[3],
