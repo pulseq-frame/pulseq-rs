@@ -81,7 +81,7 @@ impl Display for Sequence {
 impl Display for TimeRaster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "grad_raster: {}", self.grad)?;
-        writeln!(f, "rf_raster: {}", self.rc)?;
+        writeln!(f, "rf_raster: {}", self.rf)?;
         writeln!(f, "adc_raster: {}", self.adc)?;
         writeln!(f, "block_raster: {}", self.block)?;
 

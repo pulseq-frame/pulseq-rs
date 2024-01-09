@@ -18,7 +18,7 @@ pub struct Sequence {
 /// values of the Siemens interpreter if not provided in pre 1.4 sequences.
 pub struct TimeRaster {
     pub grad: f32,
-    pub rc: f32,
+    pub rf: f32,
     pub adc: f32,
     pub block: f32,
 }
@@ -27,7 +27,7 @@ impl Default for TimeRaster {
     fn default() -> Self {
         Self {
             grad: 10e-6,
-            rc: 1e-6,
+            rf: 1e-6,
             adc: 0.1e-6,
             block: 10e-6,
         }
@@ -127,6 +127,12 @@ impl Gradient {
                 ..
             } => delay + rise + flat + fall,
         }
+    }
+}
+
+impl Adc {
+    pub fn duration(&self) -> f32 {
+        return self.delay + self.num as f32 * self.dwell
     }
 }
 

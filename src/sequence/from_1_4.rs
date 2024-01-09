@@ -65,7 +65,7 @@ impl Sequence {
                 defs.rest,
                 TimeRaster {
                     grad: defs.grad_raster,
-                    rc: defs.rf_raster,
+                    rf: defs.rf_raster,
                     adc: defs.adc_raster,
                     block: defs.block_dur_raster,
                 },
@@ -158,41 +158,42 @@ impl Sequence {
                     adc,
                     ext: _,
                 } => {
-                    let rf_dur = if rf == 0 {
-                        0.0
-                    } else {
-                        rfs[&rf].duration(time_raster.rc)
-                    };
-                    let gx_dur = if gx == 0 {
-                        0.0
-                    } else {
-                        gradients[&gx].duration(time_raster.grad)
-                    };
-                    let gy_dur = if gy == 0 {
-                        0.0
-                    } else {
-                        gradients[&gy].duration(time_raster.grad)
-                    };
-                    let gz_dur = if gz == 0 {
-                        0.0
-                    } else {
-                        gradients[&gz].duration(time_raster.grad)
-                    };
-                    let delay_dur = if delay == 0 { 0.0 } else { delays[&delay] };
+                    // TODO: return error if some ID does not exist
+                    let rf = (rf != 0).then(|| rfs[&rf].clone());
+                    let gx = (gx != 0).then(|| gradients[&gx].clone());
+                    let gy = (gy != 0).then(|| gradients[&gy].clone());
+                    let gz = (gz != 0).then(|| gradients[&gz].clone());
+                    let adc = (adc != 0).then(|| adcs[&adc].clone());
+                    let delay = (delay != 0).then(|| delays[&delay]);
 
-                    let duration = [rf_dur, gx_dur, gy_dur, gz_dur, delay_dur]
-                        .into_iter()
-                        .max_by(|x, y| x.total_cmp(y))
-                        .unwrap();
+                    let mut duration: f32 = 0.0;
+                    if let Some(rf) = &rf {
+                        duration = duration.max(rf.duration(time_raster.rf));
+                    }
+                    if let Some(gx) = &gx {
+                        duration = duration.max(gx.duration(time_raster.grad));
+                    }
+                    if let Some(gy) = &gy {
+                        duration = duration.max(gy.duration(time_raster.grad));
+                    }
+                    if let Some(gz) = &gz {
+                        duration = duration.max(gz.duration(time_raster.grad));
+                    }
+                    if let Some(adc) = &adc {
+                        duration = duration.max(adc.duration());
+                    }
+                    if let Some(delay) = delay {
+                        duration = duration.max(delay);
+                    }
 
                     Block {
                         id,
                         duration,
-                        rf: (rf != 0).then(|| rfs[&rf].clone()),
-                        gx: (gx != 0).then(|| gradients[&gx].clone()),
-                        gy: (gy != 0).then(|| gradients[&gy].clone()),
-                        gz: (gz != 0).then(|| gradients[&gz].clone()),
-                        adc: (adc != 0).then(|| adcs[&adc].clone()),
+                        rf,
+                        gx,
+                        gy,
+                        gz,
+                        adc,
                     }
                 }
                 crate::parsers::Block::V140 {
