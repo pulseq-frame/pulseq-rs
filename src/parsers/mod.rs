@@ -58,16 +58,16 @@ pub enum Section {
 
 #[derive(Debug)]
 pub struct Version {
-    major: u32,
-    minor: u32,
-    revision: u32,
-    rev_suppl: Option<String>,
+    pub major: u32,
+    pub minor: u32,
+    pub revision: u32,
+    pub rev_suppl: Option<String>,
 }
 
 #[derive(Debug)]
 pub struct Signature {
-    typ: String,
-    hash: String,
+    pub typ: String,
+    pub hash: String,
 }
 
 #[derive(Debug)]
@@ -174,29 +174,29 @@ pub struct Delay {
 
 #[derive(Debug)]
 pub struct Extensions {
-    refs: Vec<ExtensionRef>,
-    specs: Vec<ExtensionSpec>,
+    pub refs: Vec<ExtensionRef>,
+    pub specs: Vec<ExtensionSpec>,
 }
 
 #[derive(Debug)]
 pub struct ExtensionRef {
-    id: u32,
-    spec_id: u32,
-    obj_id: u32,
-    next: u32,
+    pub id: u32,
+    pub spec_id: u32,
+    pub obj_id: u32,
+    pub next: u32,
 }
 
 #[derive(Debug)]
 pub struct ExtensionSpec {
-    id: u32,
-    name: String,
-    instances: Vec<ExtensionObject>,
+    pub id: u32,
+    pub name: String,
+    pub instances: Vec<ExtensionObject>,
 }
 
 #[derive(Debug)]
 pub struct ExtensionObject {
-    id: u32,
-    data: String,
+    pub id: u32,
+    pub data: String,
 }
 
 #[derive(Debug)]
