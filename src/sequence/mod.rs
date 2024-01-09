@@ -12,9 +12,10 @@ pub struct Sequence {
 pub struct Metadata {
     pub name: Option<String>,
     pub fov: Option<(f32, f32, f32)>,
-    // Raster times are needed if time shapes are used.
-    // These times are required by the 1.4+ parser, so if time shapes are used
-    // but these values are None, it is a bug in the conversion process.
+    // Before pulseq 1.4, definitions were not enforced. But despite this, the
+    // RF and gradient shapes rely on a time raster! We solve this by always
+    // providing the following definitions, filling them with the default
+    // values of the Siemens interpreter if not provided in pre 1.4 sequences.
     pub grad_raster: f32,
     pub rf_raster: f32,
     pub adc_raster: f32,
@@ -39,29 +40,25 @@ pub struct Rf {
     pub amp: f32,
     /// Unit: `[rad]`
     pub phase: f32,
-    pub amp_shape: Arc<Shape>,
-    pub phase_shape: Arc<Shape>,
-    pub time_shape: Option<Arc<Shape>>,
     /// Unit: `[s]`
     pub delay: f32,
     /// Unit: `[Hz]`
     pub freq: f32,
-}
-
-impl Rf {
-    pub fn duration(&self, rf_raster: f32) -> f32 {
-        self.delay + calc_shape_dur(&self.amp_shape, self.time_shape.as_deref(), rf_raster)
-    }
+    // Shapes
+    pub amp_shape: Arc<Shape>,
+    pub phase_shape: Arc<Shape>,
+    pub time_shape: Option<Arc<Shape>>,
 }
 
 pub enum Gradient {
     Free {
         /// Unit: `[Hz/m]`
         amp: f32,
-        shape: Arc<Shape>,
-        time: Option<Arc<Shape>>,
         /// Unit: `[s]`
         delay: f32,
+        // Shapes
+        shape: Arc<Shape>,
+        time: Option<Arc<Shape>>,
     },
     Trap {
         /// Unit: `[Hz/m]`
@@ -75,6 +72,28 @@ pub enum Gradient {
         /// Unit: `[s]`
         delay: f32,
     },
+}
+
+pub struct Adc {
+    pub num: u32,
+    /// Unit: `[s]`
+    pub dwell: f32,
+    /// Unit: `[s]`
+    pub delay: f32,
+    /// Unit: `[Hz]`
+    pub freq: f32,
+    /// Unit: `[rad]`
+    pub phase: f32,
+}
+
+pub struct Shape(pub Vec<f32>);
+
+// Helper functions
+
+impl Rf {
+    pub fn duration(&self, rf_raster: f32) -> f32 {
+        self.delay + calc_shape_dur(&self.amp_shape, self.time_shape.as_deref(), rf_raster)
+    }
 }
 
 impl Gradient {
@@ -102,17 +121,3 @@ fn calc_shape_dur(shape: &Shape, time: Option<&Shape>, raster: f32) -> f32 {
         shape.0.len() as f32 * raster
     }
 }
-
-pub struct Adc {
-    pub num: u32,
-    /// Unit: `[s]`
-    pub dwell: f32,
-    /// Unit: `[s]`
-    pub delay: f32,
-    /// Unit: `[Hz]`
-    pub freq: f32,
-    /// Unit: `[rad]`
-    pub phase: f32,
-}
-
-pub struct Shape(pub Vec<f32>);
