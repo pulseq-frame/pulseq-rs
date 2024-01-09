@@ -151,6 +151,7 @@ impl Sequence {
                         phase: rf.phase,
                         amp_shape: shapes[&rf.mag_id].clone(),
                         phase_shape: shapes[&rf.phase_id].clone(),
+                        time_shape: (rf.time_id != 0).then(|| shapes[&rf.time_id].clone()),
                         delay: rf.delay,
                         freq: rf.freq,
                     }),
@@ -173,7 +174,7 @@ impl Sequence {
                     let rf_dur = if rf == 0 {
                         0.0
                     } else {
-                        rfs[&rf].amp_shape.0.len() as f32 * metadata.rf_raster
+                        rfs[&rf].duration(metadata.rf_raster)
                     };
                     let gx_dur = if gx == 0 {
                         0.0

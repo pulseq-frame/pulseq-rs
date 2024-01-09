@@ -22,7 +22,7 @@ pub struct Metadata {
 }
 
 pub struct Block {
-    /// Blocks are stored in a simple vector, isntead of a HashMap with their ID
+    /// Blocks are stored in a simple vector, instead of a HashMap with their ID
     /// as value, because they are not referenced but executed top to bottom.
     /// Its own ID is stored inside of the Block for error reporting.
     pub id: u32,
@@ -41,10 +41,17 @@ pub struct Rf {
     pub phase: f32,
     pub amp_shape: Arc<Shape>,
     pub phase_shape: Arc<Shape>,
+    pub time_shape: Option<Arc<Shape>>,
     /// Unit: `[s]`
     pub delay: f32,
     /// Unit: `[Hz]`
     pub freq: f32,
+}
+
+impl Rf {
+    pub fn duration(&self, rf_raster: f32) -> f32 {
+        self.delay + calc_shape_dur(&self.amp_shape, self.time_shape.as_deref(), rf_raster)
+    }
 }
 
 pub enum Gradient {
@@ -74,7 +81,9 @@ impl Gradient {
     pub fn duration(&self, grad_raster: f32) -> f32 {
         match self {
             // TODO: duration calculation should take time_shape into account
-            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f32 * grad_raster,
+            Gradient::Free {
+                shape, delay, time, ..
+            } => delay + calc_shape_dur(shape, time.as_deref(), grad_raster),
             Gradient::Trap {
                 rise,
                 flat,
@@ -83,6 +92,14 @@ impl Gradient {
                 ..
             } => delay + rise + flat + fall,
         }
+    }
+}
+
+fn calc_shape_dur(shape: &Shape, time: Option<&Shape>, raster: f32) -> f32 {
+    if let Some(time) = time {
+        time.0.last().cloned().unwrap_or(0.0) * raster
+    } else {
+        shape.0.len() as f32 * raster
     }
 }
 
