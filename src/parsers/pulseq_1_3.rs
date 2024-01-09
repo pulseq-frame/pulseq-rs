@@ -26,14 +26,6 @@ fn definitions() -> Parser<impl Parse<Output = Definitions>> {
 fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
     let mut defs: HashMap<_, _> = defs.into_iter().collect();
 
-    fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
-        let splits: Vec<_> = s.split_whitespace().collect();
-        if splits.len() != 3 {
-            return Err(ParseError::Generic);
-        }
-        Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
-    }
-
     // Before pulseq 1.4, defining raster times was not mandatory. This is a
     // flaw in the specification, because without the raster time, the duration
     // of RF pulses and non-trap gradients is completely undefined. The

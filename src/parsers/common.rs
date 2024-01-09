@@ -10,6 +10,56 @@ pub enum ParseError {
     ParseFloat(#[from] std::num::ParseFloatError),
 }
 
+// Helper functions
+
+pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
+    let splits: Vec<_> = s.split_whitespace().collect();
+    if splits.len() != 3 {
+        return Err(ParseError::Generic);
+    }
+    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
+}
+
+pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
+    // First, decompress into the deriviate of the shape
+    let mut deriv = Vec::with_capacity(num_samples as usize);
+
+    let mut a = f32::NAN;
+    let mut b = f32::NAN;
+    for sample in samples {
+        if a == b {
+            if sample != sample.round() {
+                return Err(ParseError::Generic);
+            }
+            for _ in 0..sample as usize {
+                deriv.push(b);
+            }
+            b = f32::NAN;
+        } else {
+            deriv.push(sample);
+        }
+
+        a = b;
+        b = sample;
+    }
+
+    if deriv.len() != num_samples as usize {
+        return Err(ParseError::Generic);
+    }
+
+    // Then, do a cumultative sum to get the shape
+    Ok(deriv
+        .into_iter()
+        .scan(0.0, |acc, x| {
+            *acc += x;
+            Some(*acc)
+        })
+        .collect())
+}
+
+// Simple parsers that are not really specific to pulseq
+
+/// Matches at least one whitespace but now newline
 pub fn ws() -> Matcher<impl Match> {
     one_of(" \t").repeat(1..)
 }
@@ -49,41 +99,4 @@ pub fn float() -> Parser<impl Parse<Output = f32>> {
     let exp = one_of("eE") + one_of("+-").opt() + one_of("0123456789").repeat(1..);
     let number = tag("-").opt() + integer + frac.opt() + exp.opt();
     number.convert(f32::from_str, "Failed to parse string as float")
-}
-
-pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
-    // First, decompress into the deriviate of the shape
-    let mut deriv = Vec::with_capacity(num_samples as usize);
-
-    let mut a = f32::NAN;
-    let mut b = f32::NAN;
-    for sample in samples {
-        if a == b {
-            if sample != sample.round() {
-                return Err(ParseError::Generic);
-            }
-            for _ in 0..sample as usize {
-                deriv.push(b);
-            }
-            b = f32::NAN;
-        } else {
-            deriv.push(sample);
-        }
-
-        a = b;
-        b = sample;
-    }
-
-    if deriv.len() != num_samples as usize {
-        return Err(ParseError::Generic);
-    }
-
-    // Then, do a cumultative sum to get the shape
-    Ok(deriv
-        .into_iter()
-        .scan(0.0, |acc, x| {
-            *acc += x;
-            Some(*acc)
-        })
-        .collect())
 }

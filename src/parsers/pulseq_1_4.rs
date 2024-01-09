@@ -34,6 +34,36 @@ fn definitions() -> Parser<impl Parse<Output = Definitions>> {
     raw_definitions().convert(parse_defs, "Failed to parse definitions")
 }
 
+fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
+    let mut defs: HashMap<_, _> = defs.into_iter().collect();
+
+    Ok(Definitions {
+        grad_raster: defs
+            .remove("GradientRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        rf_raster: defs
+            .remove("RadiofrequencyRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        adc_raster: defs
+            .remove("AdcRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        block_dur_raster: defs
+            .remove("BlockDurationRaster")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        name: defs.remove("Name"),
+        fov: defs.remove("FOV").map(parse_fov).transpose()?,
+        total_duration: defs
+            .remove("TotalDuration")
+            .map(|s| s.parse())
+            .transpose()?,
+        rest: defs,
+    })
+}
+
 fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
     let block = (ws().opt() + int() + (ws() + int()).repeat(7)).map(|(id, tags)| Block::V140 {
         id,
@@ -93,42 +123,4 @@ fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
         "Failed to decompress shape",
     );
     tag_nl("[SHAPES]") + shape.repeat(1..)
-}
-
-fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
-    let mut defs: HashMap<_, _> = defs.into_iter().collect();
-
-    fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
-        let splits: Vec<_> = s.split_whitespace().collect();
-        if splits.len() != 3 {
-            return Err(ParseError::Generic);
-        }
-        Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
-    }
-
-    Ok(Definitions {
-        grad_raster: defs
-            .remove("GradientRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        rf_raster: defs
-            .remove("RadiofrequencyRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        adc_raster: defs
-            .remove("AdcRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        block_dur_raster: defs
-            .remove("BlockDurationRaster")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        name: defs.remove("Name"),
-        fov: defs.remove("FOV").map(parse_fov).transpose()?,
-        total_duration: defs
-            .remove("TotalDuration")
-            .map(|s| s.parse())
-            .transpose()?,
-        rest: defs,
-    })
 }
