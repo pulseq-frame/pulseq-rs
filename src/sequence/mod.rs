@@ -34,6 +34,11 @@ impl Default for TimeRaster {
     }
 }
 
+// TODO: give all structs a validate() function, that checks if
+// - all shapes have the same size
+// - no event is longer than the block duration
+// - maybe other invariants the spec mandates?
+
 pub struct Block {
     /// Blocks are stored in a simple vector, instead of a HashMap with their ID
     /// as value, because they are not referenced but executed top to bottom.
@@ -111,7 +116,6 @@ impl Rf {
 impl Gradient {
     pub fn duration(&self, grad_raster: f32) -> f32 {
         match self {
-            // TODO: duration calculation should take time_shape into account
             Gradient::Free {
                 shape, delay, time, ..
             } => delay + calc_shape_dur(shape, time.as_deref(), grad_raster),

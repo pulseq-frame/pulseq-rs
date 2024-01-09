@@ -74,14 +74,11 @@ impl Sequence {
             (None, None, HashMap::new(), TimeRaster::default())
         };
 
-        // NOTE: if some ID exists more than once in the file, we overwrite it.
+        // TODO: if some ID exists more than once in the file, we overwrite it.
 
         let shapes: HashMap<_, _> = extract_iter!(sections, Shapes)
             .map(|shape| (shape.id, Arc::new(Shape(shape.samples))))
             .collect();
-
-        // NOTE: It might be better to convert, e.g.: us to s, here instead of
-        // inside of the raw pulseq parser
 
         let adcs: HashMap<_, _> = extract_iter!(sections, Adcs)
             .map(|adc| {
