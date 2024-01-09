@@ -2,8 +2,10 @@ METADATA
 --------
 name:        'epi'
 fov:         (0.25, 0.25, 0.003)
-grad_raster: 1e-5
-rf_raster:   0.000001
+grad_raster: 0.00001
+rf_raster: 0.000001
+adc_raster: 0.0000001
+block_raster: 0.00001
 
 
 BLOCKS

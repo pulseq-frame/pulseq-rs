@@ -51,24 +51,47 @@ macro_rules! extract_iter {
 
 impl Sequence {
     pub fn from_1_4(mut sections: Vec<Section>) -> Self {
-        let (block_dur_raster, metadata) = match extract!(sections, Definitions) {
-            crate::parsers::Definitions::V131(_) => panic!("This is a 1.4 converter"),
-            crate::parsers::Definitions::V140 {
-                grad_raster,
-                rf_raster,
-                block_dur_raster,
-                name,
-                fov,
-                ..
-            } => (
-                block_dur_raster,
+        // This is only legal for pre-1.4 files
+        let (block_dur_raster, metadata) = if sections
+            .iter()
+            .filter(|&s| matches!(s, Section::Definitions(_)))
+            .count()
+            > 0
+        {
+            match extract!(sections, Definitions) {
+                crate::parsers::Definitions::V131(defs) => todo!("Remove v131 definitions"),
+                crate::parsers::Definitions::V140 {
+                    grad_raster,
+                    rf_raster,
+                    adc_raster,
+                    block_dur_raster,
+                    name,
+                    fov,
+                    ..
+                } => (
+                    block_dur_raster,
+                    Metadata {
+                        name: name,
+                        fov: fov,
+                        grad_raster: grad_raster,
+                        rf_raster: rf_raster,
+                        adc_raster: adc_raster,
+                        block_raster: block_dur_raster,
+                    },
+                ),
+            }
+        } else {
+            (
+                10e-6,
                 Metadata {
-                    name: name,
-                    fov: fov,
-                    grad_raster: Some(grad_raster),
-                    rf_raster: Some(rf_raster),
+                    name: None,
+                    fov: None,
+                    grad_raster: 10e-6,
+                    rf_raster: 1e-6,
+                    adc_raster: 0.1e-6,
+                    block_raster: 10e-6,
                 },
-            ),
+            )
         };
 
         // NOTE: if some ID exists more than once in the file, we overwrite it.
@@ -93,6 +116,10 @@ impl Sequence {
                     }),
                 )
             })
+            .collect();
+
+        let delays: HashMap<_, _> = extract_iter!(sections, Delays)
+            .map(|delay| (delay.id, delay.delay))
             .collect();
 
         let gradients: HashMap<_, _> = extract_iter!(sections, Gradients)
@@ -143,7 +170,53 @@ impl Sequence {
 
         let blocks: Vec<Block> = extract_iter!(sections, Blocks)
             .map(|block| match block {
-                crate::parsers::Block::V131 { .. } => panic!("This is a 1.4 converter"),
+                crate::parsers::Block::V131 {
+                    id,
+                    delay,
+                    rf,
+                    gx,
+                    gy,
+                    gz,
+                    adc,
+                    ext: _,
+                } => {
+                    let rf_dur = if rf == 0 {
+                        0.0
+                    } else {
+                        rfs[&rf].amp_shape.0.len() as f32 * metadata.rf_raster
+                    };
+                    let gx_dur = if gx == 0 {
+                        0.0
+                    } else {
+                        gradients[&gx].duration(metadata.grad_raster)
+                    };
+                    let gy_dur = if gy == 0 {
+                        0.0
+                    } else {
+                        gradients[&gy].duration(metadata.grad_raster)
+                    };
+                    let gz_dur = if gz == 0 {
+                        0.0
+                    } else {
+                        gradients[&gz].duration(metadata.grad_raster)
+                    };
+                    let delay_dur = if delay == 0 { 0.0 } else { delays[&delay] };
+
+                    let duration = [rf_dur, gx_dur, gy_dur, gz_dur, delay_dur]
+                        .into_iter()
+                        .max_by(|x, y| x.total_cmp(&y))
+                        .unwrap();
+
+                    Block {
+                        id,
+                        duration,
+                        rf: (rf != 0).then(|| rfs[&rf].clone()),
+                        gx: (gx != 0).then(|| gradients[&gx].clone()),
+                        gy: (gy != 0).then(|| gradients[&gy].clone()),
+                        gz: (gz != 0).then(|| gradients[&gz].clone()),
+                        adc: (adc != 0).then(|| adcs[&adc].clone()),
+                    }
+                }
                 crate::parsers::Block::V140 {
                     id,
                     duration,

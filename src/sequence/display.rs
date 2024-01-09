@@ -73,16 +73,10 @@ impl Display for Metadata {
         } else {
             writeln!(f, "fov:         ?")?;
         }
-        if let Some(grad_raster) = &self.grad_raster {
-            writeln!(f, "grad_raster: {grad_raster:?}")?;
-        } else {
-            writeln!(f, "grad_raster: ?")?;
-        }
-        if let Some(rf_raster) = &self.rf_raster {
-            writeln!(f, "rf_raster:   {rf_raster}")?;
-        } else {
-            writeln!(f, "rf_raster:   ?")?;
-        }
+        writeln!(f, "grad_raster: {}", self.grad_raster)?;
+        writeln!(f, "rf_raster: {}", self.rf_raster)?;
+        writeln!(f, "adc_raster: {}", self.adc_raster)?;
+        writeln!(f, "block_raster: {}", self.block_raster)?;
 
         Ok(())
     }

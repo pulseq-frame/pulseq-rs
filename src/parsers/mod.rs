@@ -167,9 +167,9 @@ pub struct Adc {
 
 #[derive(Debug)]
 pub struct Delay {
-    id: u32,
+    pub id: u32,
     /// `s` (from pulseq: `us`)
-    delay: f32,
+    pub delay: f32,
 }
 
 #[derive(Debug)]

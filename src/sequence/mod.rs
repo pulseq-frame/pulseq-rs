@@ -28,8 +28,10 @@ pub struct Metadata {
     // Raster times are needed if time shapes are used.
     // These times are required by the 1.4+ parser, so if time shapes are used
     // but these values are None, it is a bug in the conversion process.
-    pub grad_raster: Option<f32>,
-    pub rf_raster: Option<f32>,
+    pub grad_raster: f32,
+    pub rf_raster: f32,
+    pub adc_raster: f32,
+    pub block_raster: f32,
 }
 
 pub struct Block {
@@ -79,6 +81,27 @@ pub enum Gradient {
         /// Unit: `[s]`
         delay: f32,
     },
+}
+
+impl Gradient {
+    pub fn duration(&self, grad_raster: f32) -> f32 {
+        match self {
+            // TODO: duration calculation should take time_shape into account
+            Gradient::Free {
+                amp,
+                shape,
+                time,
+                delay,
+            } => delay + shape.0.len() as f32 * grad_raster,
+            Gradient::Trap {
+                amp,
+                rise,
+                flat,
+                fall,
+                delay,
+            } => delay + rise + flat + fall,
+        }
+    }
 }
 
 pub struct Adc {
