@@ -1,102 +1,91 @@
 use ezpc::*;
-use std::str::FromStr;
-use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum ParseError {
-    #[error("GENERIC ERROR - IMPLEMENT MORE DETAILED VARIANTS")]
-    Generic,
-    #[error(transparent)]
-    ParseFloat(#[from] std::num::ParseFloatError),
+use super::helpers::*;
+use super::*;
+
+// Parsers for things that didn't change within the supported pulseq versions
+
+pub fn version() -> Parser<impl Parse<Output = Version>> {
+    let major = tag_ws("major") + int() + nl();
+    let minor = tag_ws("minor") + int() + nl();
+    let revision = tag_ws("revision") + int() + ident().opt() + nl();
+
+    (tag_nl("[VERSION]") + major + minor + revision).map(
+        |((major, minor), (revision, rev_suppl))| Version {
+            major,
+            minor,
+            revision,
+            rev_suppl,
+        },
+    )
 }
 
-// Helper functions
-
-pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
-    let splits: Vec<_> = s.split_whitespace().collect();
-    if splits.len() != 3 {
-        return Err(ParseError::Generic);
-    }
-    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
+pub fn raw_definitions() -> Parser<impl Parse<Output = Vec<(String, String)>>> {
+    let def = ident() + ws() + none_of("\n").repeat(1..).map(|s| s.trim().to_owned()) + nl();
+    tag_nl("[DEFINITIONS]") + def.repeat(1..)
 }
 
-pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
-    // First, decompress into the deriviate of the shape
-    let mut deriv = Vec::with_capacity(num_samples as usize);
+pub fn adcs() -> Parser<impl Parse<Output = Vec<Adc>>> {
+    let i = || ws() + int();
+    let f = || ws() + float();
+    let adc = (ws().opt() + int() + i() + f() + i() + f() + f()).map(
+        |(((((id, num), dwell), delay), freq), phase)| Adc {
+            id,
+            num,
+            dwell: dwell * 1e-9,
+            delay: delay as f32 * 1e-6,
+            freq,
+            phase,
+        },
+    );
+    tag_nl("[ADC]") + (adc + nl()).repeat(1..)
+}
 
-    let mut a = f32::NAN;
-    let mut b = f32::NAN;
-    for sample in samples {
-        if a == b {
-            if sample != sample.round() {
-                return Err(ParseError::Generic);
+pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {
+    let rest_of_line = none_of("\n").repeat(1..).map(|s| s.trim().to_owned());
+    let i = || ws() + int();
+    let ext_ref =
+        (ws().opt() + int() + i() + i() + i() + nl()).map(|(((id, spec_id), obj_id), next)| {
+            ExtensionRef {
+                id,
+                spec_id,
+                obj_id,
+                next,
             }
-            for _ in 0..sample as usize {
-                deriv.push(b);
-            }
-            b = f32::NAN;
-        } else {
-            deriv.push(sample);
-        }
-
-        a = b;
-        b = sample;
-    }
-
-    if deriv.len() != num_samples as usize {
-        return Err(ParseError::Generic);
-    }
-
-    // Then, do a cumultative sum to get the shape
-    Ok(deriv
-        .into_iter()
-        .scan(0.0, |acc, x| {
-            *acc += x;
-            Some(*acc)
-        })
-        .collect())
+        });
+    let ext_obj =
+        (ws().opt() + int() + rest_of_line + nl()).map(|(id, data)| ExtensionObject { id, data });
+    let ext_spec = (tag_ws("extension") + ident() + ws() + int() + nl() + ext_obj.repeat(1..)).map(
+        |((name, id), instances)| ExtensionSpec {
+            id,
+            name,
+            instances,
+        },
+    );
+    (tag_nl("[EXTENSIONS]") + ext_ref.repeat(1..) + ext_spec.repeat(1..))
+        .map(|(refs, specs)| Extensions { refs, specs })
 }
 
-// Simple parsers that are not really specific to pulseq
-
-/// Matches at least one whitespace but now newline
-pub fn ws() -> Matcher<impl Match> {
-    one_of(" \t").repeat(1..)
+pub fn traps() -> Parser<impl Parse<Output = Vec<Trap>>> {
+    let i = || ws() + int();
+    let f = ws() + float();
+    let trap = (ws().opt() + int() + f + i() + i() + i() + i()).map(
+        |(((((id, amp), rise), flat), fall), delay)| Trap {
+            id,
+            amp,
+            rise: rise as f32 * 1e-6,
+            flat: flat as f32 * 1e-6,
+            fall: fall as f32 * 1e-6,
+            delay: delay as f32 * 1e-6,
+        },
+    );
+    tag_nl("[TRAP]") + (trap + nl()).repeat(1..)
 }
 
-/// Matches as many whitespaces and comments as possible but expects at least one '\n'
-pub fn nl() -> Matcher<impl Match> {
-    let ignore = || ws() | (tag("#") + none_of("\n").repeat(0..));
-    let eol = || tag("\r\n") | tag("\n");
-
-    eof() | ((ignore().opt() + eol()).repeat(1..) + ignore().opt())
-}
-
-/// Shorthand for tag + whitespace
-pub fn tag_ws(tag_str: &'static str) -> Matcher<impl Match> {
-    tag(tag_str) + ws()
-}
-
-/// Shorthand for tag + newline
-pub fn tag_nl(tag_str: &'static str) -> Matcher<impl Match> {
-    tag(tag_str) + nl()
-}
-
-pub fn ident() -> Parser<impl Parse<Output = String>> {
-    is_a(char::is_alphanumeric)
-        .repeat(1..)
-        .map(|s| s.to_owned())
-}
-
-pub fn int() -> Parser<impl Parse<Output = u32>> {
-    (tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..)))
-        .convert(|s| s.parse(), "Failed to parse string as int")
-}
-
-pub fn float() -> Parser<impl Parse<Output = f32>> {
-    let integer = tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..));
-    let frac = tag(".") + one_of("0123456789").repeat(1..);
-    let exp = one_of("eE") + one_of("+-").opt() + one_of("0123456789").repeat(1..);
-    let number = tag("-").opt() + integer + frac.opt() + exp.opt();
-    number.convert(f32::from_str, "Failed to parse string as float")
+pub fn raw_shape() -> Parser<impl Parse<Output = (u32, (u32, Vec<f32>))>> {
+    // The spec and the exporter use different tags, we allow both.
+    let shape_id = (tag_ws("Shape_ID") | tag_ws("shape_id")) + int() + nl();
+    let num_samples = (tag_ws("Num_Uncompressed") | tag_ws("num_samples")) + int() + nl();
+    let samples = num_samples + (ws().opt() + float() + nl()).repeat(1..);
+    shape_id + samples
 }
