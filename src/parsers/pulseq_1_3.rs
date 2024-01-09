@@ -19,19 +19,6 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
         .repeat(0..)
 }
 
-fn version() -> Parser<impl Parse<Output = Version>> {
-    raw_version().convert(
-        |v| {
-            if v.major == 1 && v.minor == 3 {
-                Ok(v)
-            } else {
-                Err(ParseError::Generic)
-            }
-        },
-        "Expected version 1.3.x",
-    )
-}
-
 fn definitions() -> Parser<impl Parse<Output = Definitions>> {
     raw_definitions().convert(parse_defs, "Failed to parse definitions")
 }

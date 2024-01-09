@@ -5,7 +5,7 @@ use super::*;
 
 // Parsers for things that didn't change within the supported pulseq versions
 
-pub fn raw_version() -> Parser<impl Parse<Output = Version>> {
+pub fn version() -> Parser<impl Parse<Output = Version>> {
     let major = tag_ws("major") + int() + nl();
     let minor = tag_ws("minor") + int() + nl();
     let revision = tag_ws("revision") + int() + ident().opt() + nl();

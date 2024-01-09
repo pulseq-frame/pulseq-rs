@@ -1,5 +1,4 @@
 use ezpc::*;
-use std::collections::HashMap;
 
 use super::common::*;
 use super::*;
@@ -18,19 +17,6 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
             | extensions().map(Section::Extensions)
             | shapes().map(Section::Shapes))
         .repeat(0..)
-}
-
-fn version() -> Parser<impl Parse<Output = Version>> {
-    raw_version().convert(
-        |v| {
-            if v.major == 1 && v.minor == 4 {
-                Ok(v)
-            } else {
-                Err(ParseError::Generic)
-            }
-        },
-        "Expected version 1.4.x",
-    )
 }
 
 fn signature() -> Parser<impl Parse<Output = Signature>> {

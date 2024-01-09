@@ -23,8 +23,9 @@ pub mod pulseq_all;
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
 pub fn parse_file(source: &str) -> Result<Vec<Section>, ParseError> {
-    let parser = common::nl().opt() + pulseq_all::raw_version() + ezpc::none_of("").repeat(0..);
-    let version = parser.parse_all(source).map_err(|_| ParseError::Generic)?;
+    let version = (common::nl().opt() + pulseq_all::version() + ezpc::none_of("").repeat(0..))
+        .parse_all(source)
+        .map_err(|_| ParseError::Generic)?;
 
     match version {
         Version {
