@@ -51,8 +51,8 @@ macro_rules! extract_iter {
 
 impl Sequence {
     pub fn from_1_4(mut sections: Vec<Section>) -> Self {
-        // This is only legal for pre-1.4 files
-        let (block_dur_raster, metadata) = if sections
+        // TODO: throw an error if definitions are missing in a 1.4 file
+        let (name, fov, definitions, time_raster) = if sections
             .iter()
             .filter(|&s| matches!(s, Section::Definitions(_)))
             .count()
@@ -60,28 +60,18 @@ impl Sequence {
         {
             let defs = extract!(sections, Definitions);
             (
-                defs.block_dur_raster,
-                Metadata {
-                    name: defs.name,
-                    fov: defs.fov,
-                    grad_raster: defs.grad_raster,
-                    rf_raster: defs.rf_raster,
-                    adc_raster: defs.adc_raster,
-                    block_raster: defs.block_dur_raster,
+                defs.name,
+                defs.fov,
+                defs.rest,
+                TimeRaster {
+                    grad: defs.grad_raster,
+                    rc: defs.rf_raster,
+                    adc: defs.adc_raster,
+                    block: defs.block_dur_raster,
                 },
             )
         } else {
-            (
-                10e-6,
-                Metadata {
-                    name: None,
-                    fov: None,
-                    grad_raster: 10e-6,
-                    rf_raster: 1e-6,
-                    adc_raster: 0.1e-6,
-                    block_raster: 10e-6,
-                },
-            )
+            (None, None, HashMap::new(), TimeRaster::default())
         };
 
         // NOTE: if some ID exists more than once in the file, we overwrite it.
@@ -174,22 +164,22 @@ impl Sequence {
                     let rf_dur = if rf == 0 {
                         0.0
                     } else {
-                        rfs[&rf].duration(metadata.rf_raster)
+                        rfs[&rf].duration(time_raster.rc)
                     };
                     let gx_dur = if gx == 0 {
                         0.0
                     } else {
-                        gradients[&gx].duration(metadata.grad_raster)
+                        gradients[&gx].duration(time_raster.grad)
                     };
                     let gy_dur = if gy == 0 {
                         0.0
                     } else {
-                        gradients[&gy].duration(metadata.grad_raster)
+                        gradients[&gy].duration(time_raster.grad)
                     };
                     let gz_dur = if gz == 0 {
                         0.0
                     } else {
-                        gradients[&gz].duration(metadata.grad_raster)
+                        gradients[&gz].duration(time_raster.grad)
                     };
                     let delay_dur = if delay == 0 { 0.0 } else { delays[&delay] };
 
@@ -219,7 +209,7 @@ impl Sequence {
                     ext: _,
                 } => Block {
                     id,
-                    duration: duration as f32 * block_dur_raster,
+                    duration: duration as f32 * time_raster.block,
                     rf: (rf != 0).then(|| rfs[&rf].clone()),
                     gx: (gx != 0).then(|| gradients[&gx].clone()),
                     gy: (gy != 0).then(|| gradients[&gy].clone()),
@@ -229,6 +219,12 @@ impl Sequence {
             })
             .collect();
 
-        Self { metadata, blocks }
+        Self {
+            name,
+            fov,
+            definitions,
+            time_raster,
+            blocks,
+        }
     }
 }

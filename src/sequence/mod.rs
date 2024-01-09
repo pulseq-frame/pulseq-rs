@@ -1,25 +1,37 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 mod display;
 pub mod from_1_4;
 
 pub struct Sequence {
-    pub metadata: Metadata,
+    pub time_raster: TimeRaster,
+    pub name: Option<String>,
+    pub fov: Option<(f32, f32, f32)>,
+    pub definitions: HashMap<String, String>,
     pub blocks: Vec<Block>,
 }
 
-pub struct Metadata {
-    pub name: Option<String>,
-    pub fov: Option<(f32, f32, f32)>,
-    // Before pulseq 1.4, definitions were not enforced. But despite this, the
-    // RF and gradient shapes rely on a time raster! We solve this by always
-    // providing the following definitions, filling them with the default
-    // values of the Siemens interpreter if not provided in pre 1.4 sequences.
-    pub grad_raster: f32,
-    pub rf_raster: f32,
-    pub adc_raster: f32,
-    pub block_raster: f32,
+/// Before pulseq 1.4, definitions were not enforced. But despite this, the
+/// RF and gradient shapes rely on a time raster! We solve this by always
+/// providing the following definitions, filling them with the default
+/// values of the Siemens interpreter if not provided in pre 1.4 sequences.
+pub struct TimeRaster {
+    pub grad: f32,
+    pub rc: f32,
+    pub adc: f32,
+    pub block: f32,
+}
+
+impl Default for TimeRaster {
+    fn default() -> Self {
+        Self {
+            grad: 10e-6,
+            rc: 1e-6,
+            adc: 0.1e-6,
+            block: 10e-6,
+        }
+    }
 }
 
 pub struct Block {

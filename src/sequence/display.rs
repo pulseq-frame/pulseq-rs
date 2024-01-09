@@ -6,9 +6,26 @@ use super::*;
 
 impl Display for Sequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "METADATA")?;
-        writeln!(f, "--------")?;
-        writeln!(f, "{}\n", self.metadata)?;
+        writeln!(f, "DEFINITIONS")?;
+        writeln!(f, "-----------")?;
+        if let Some(name) = &self.name {
+            writeln!(f, "name: '{name}'")?;
+        } else {
+            writeln!(f, "name: ?")?;
+        }
+        if let Some(fov) = &self.fov {
+            writeln!(f, "fov: {fov:?}")?;
+        } else {
+            writeln!(f, "fov: ?")?;
+        }
+        writeln!(f, "- - - - - -")?;
+        for (key, value) in &self.definitions {
+            writeln!(f, "{key}: {value}")?;
+        }
+
+        writeln!(f, "\n\nTIME RASTER")?;
+        writeln!(f, "-----------")?;
+        writeln!(f, "{}\n", self.time_raster)?;
 
         writeln!(f, "BLOCKS")?;
         writeln!(f, "------")?;
@@ -61,22 +78,12 @@ impl Display for Sequence {
     }
 }
 
-impl Display for Metadata {
+impl Display for TimeRaster {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(name) = &self.name {
-            writeln!(f, "name:        '{name}'")?;
-        } else {
-            writeln!(f, "name:        ?")?;
-        }
-        if let Some(fov) = &self.fov {
-            writeln!(f, "fov:         {fov:?}")?;
-        } else {
-            writeln!(f, "fov:         ?")?;
-        }
-        writeln!(f, "grad_raster: {}", self.grad_raster)?;
-        writeln!(f, "rf_raster: {}", self.rf_raster)?;
-        writeln!(f, "adc_raster: {}", self.adc_raster)?;
-        writeln!(f, "block_raster: {}", self.block_raster)?;
+        writeln!(f, "grad_raster: {}", self.grad)?;
+        writeln!(f, "rf_raster: {}", self.rc)?;
+        writeln!(f, "adc_raster: {}", self.adc)?;
+        writeln!(f, "block_raster: {}", self.block)?;
 
         Ok(())
     }

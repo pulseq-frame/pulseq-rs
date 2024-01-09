@@ -1,7 +1,13 @@
-METADATA
---------
-name:        'epi'
-fov:         (0.25, 0.25, 0.003)
+DEFINITIONS
+-----------
+name: 'epi'
+fov: (0.25, 0.25, 0.003)
+- - - - - -
+TotalDuration: 0.21735
+
+
+TIME RASTER
+-----------
 grad_raster: 0.00001
 rf_raster: 0.000001
 adc_raster: 0.0000001
