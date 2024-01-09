@@ -114,7 +114,7 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
         Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
     }
 
-    Ok(Definitions::V140 {
+    Ok(Definitions {
         grad_raster: defs
             .remove("GradientRasterTime")
             .ok_or(ParseError::Generic)?

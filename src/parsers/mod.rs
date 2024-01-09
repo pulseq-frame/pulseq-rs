@@ -71,18 +71,15 @@ pub struct Signature {
 }
 
 #[derive(Debug)]
-pub enum Definitions {
-    V131(HashMap<String, String>),
-    V140 {
-        grad_raster: f32,
-        rf_raster: f32,
-        adc_raster: f32,
-        block_dur_raster: f32,
-        name: Option<String>,
-        fov: Option<(f32, f32, f32)>,
-        total_duration: Option<f32>,
-        rest: HashMap<String, String>,
-    },
+pub struct Definitions {
+    pub grad_raster: f32,
+    pub rf_raster: f32,
+    pub adc_raster: f32,
+    pub block_dur_raster: f32,
+    pub name: Option<String>,
+    pub fov: Option<(f32, f32, f32)>,
+    pub total_duration: Option<f32>,
+    pub rest: HashMap<String, String>,
 }
 
 #[derive(Debug)]

@@ -111,7 +111,7 @@ impl<T> RefPrinter<T> {
 
     fn print_opt(&mut self, opt_rc: &Option<Arc<T>>) -> String {
         if let Some(rc) = opt_rc {
-            let tmp = Arc::as_ptr(&rc) as usize;
+            let tmp = Arc::as_ptr(rc) as usize;
             let next_id = self.0.len() + 1;
             let (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
             format!("{id:3}")
@@ -121,7 +121,7 @@ impl<T> RefPrinter<T> {
     }
 
     fn print(&mut self, rc: &Arc<T>) -> String {
-        let tmp = Arc::as_ptr(&rc) as usize;
+        let tmp = Arc::as_ptr(rc) as usize;
         let next_id = self.0.len() + 1;
         let (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
         format!("{id:3}")

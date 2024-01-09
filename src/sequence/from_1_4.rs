@@ -59,8 +59,7 @@ impl Sequence {
             > 0
         {
             match extract!(sections, Definitions) {
-                crate::parsers::Definitions::V131(defs) => todo!("Remove v131 definitions"),
-                crate::parsers::Definitions::V140 {
+                crate::parsers::Definitions {
                     grad_raster,
                     rf_raster,
                     adc_raster,

@@ -54,7 +54,7 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
     // times, which can be seen as the ground truth even if not given by the
     // specification.
 
-    Ok(Definitions::V140 {
+    Ok(Definitions {
         grad_raster: defs
             .remove("GradientRasterTime")
             .map(|s| s.parse())
@@ -130,7 +130,7 @@ fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
 fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
     let delay = (ws().opt() + int() + ws() + float()).map(|(id, delay)| Delay {
         id,
-        delay: delay as f32 * 1e-6,
+        delay: delay * 1e-6,
     });
     tag_nl("[DELAYS]") + (delay + nl()).repeat(1..)
 }
