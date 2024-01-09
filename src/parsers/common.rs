@@ -39,7 +39,8 @@ pub fn ident() -> Parser<impl Parse<Output = String>> {
 }
 
 pub fn int() -> Parser<impl Parse<Output = u32>> {
-    (tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..))).try_map(|s| s.parse())
+    (tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..)))
+        .convert(|s| s.parse(), "Failed to parse string as int")
 }
 
 pub fn float() -> Parser<impl Parse<Output = f32>> {
@@ -47,7 +48,7 @@ pub fn float() -> Parser<impl Parse<Output = f32>> {
     let frac = tag(".") + one_of("0123456789").repeat(1..);
     let exp = one_of("eE") + one_of("+-").opt() + one_of("0123456789").repeat(1..);
     let number = tag("-").opt() + integer + frac.opt() + exp.opt();
-    number.try_map(|s| f32::from_str(s))
+    number.convert(f32::from_str, "Failed to parse string as float")
 }
 
 pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
@@ -64,7 +65,6 @@ pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>,
             for _ in 0..sample as usize {
                 deriv.push(b);
             }
-            a = f32::NAN;
             b = f32::NAN;
         } else {
             deriv.push(sample);

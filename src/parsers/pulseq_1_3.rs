@@ -20,13 +20,16 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
 }
 
 fn version() -> Parser<impl Parse<Output = Version>> {
-    raw_version().try_map(|v| {
-        if v.major == 1 && v.minor == 3 {
-            Ok(v)
-        } else {
-            Err(ParseError::Generic)
-        }
-    })
+    raw_version().convert(
+        |v| {
+            if v.major == 1 && v.minor == 3 {
+                Ok(v)
+            } else {
+                Err(ParseError::Generic)
+            }
+        },
+        "Expected version 1.3.x",
+    )
 }
 
 fn definitions() -> Parser<impl Parse<Output = Definitions>> {
@@ -88,8 +91,11 @@ fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
 }
 
 fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
-    let shape = raw_shape().try_map(|(id, (num_samples, samples))| {
-        decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
-    });
+    let shape = raw_shape().convert(
+        |(id, (num_samples, samples))| {
+            decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
+        },
+        "Failed to decompress shape",
+    );
     tag_nl("[SHAPES]") + shape.repeat(1..)
 }

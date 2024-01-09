@@ -21,13 +21,13 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
 }
 
 fn version() -> Parser<impl Parse<Output = Version>> {
-    raw_version().try_map(|v| {
+    raw_version().convert(|v| {
         if v.major == 1 && v.minor == 4 {
             Ok(v)
         } else {
             Err(ParseError::Generic)
         }
-    })
+    }, "Expected version 1.4.x")
 }
 
 fn signature() -> Parser<impl Parse<Output = Signature>> {
@@ -42,7 +42,7 @@ fn signature() -> Parser<impl Parse<Output = Signature>> {
 }
 
 fn definitions() -> Parser<impl Parse<Output = Definitions>> {
-    raw_definitions().try_map(parse_defs)
+    raw_definitions().convert(parse_defs, "Failed to parse definitions")
 }
 
 fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
@@ -93,13 +93,13 @@ fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
 }
 
 fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
-    let shape = raw_shape().try_map(|(id, (num_samples, samples))| {
+    let shape = raw_shape().convert(|(id, (num_samples, samples))| {
         if samples.len() == num_samples as usize {
             Ok(Shape { id, samples })
         } else {
             decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
         }
-    });
+    }, "Failed to decompress shape");
     tag_nl("[SHAPES]") + shape.repeat(1..)
 }
 
