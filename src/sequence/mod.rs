@@ -132,7 +132,7 @@ impl Gradient {
 
 impl Adc {
     pub fn duration(&self) -> f32 {
-        return self.delay + self.num as f32 * self.dwell
+        self.delay + self.num as f32 * self.dwell
     }
 }
 

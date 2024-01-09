@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parsers::Section;
+use crate::parsers::{helpers::ParseError, Section};
 
 use super::*;
 
@@ -50,7 +50,7 @@ macro_rules! extract_iter {
 }
 
 impl Sequence {
-    pub fn from_1_4(mut sections: Vec<Section>) -> Self {
+    pub fn from_1_4(mut sections: Vec<Section>) -> Result<Self, ParseError> {
         // TODO: throw an error if definitions are missing in a 1.4 file
         let (name, fov, definitions, time_raster) = if sections
             .iter()
@@ -146,83 +146,105 @@ impl Sequence {
             })
             .collect();
 
-        let blocks: Vec<Block> = extract_iter!(sections, Blocks)
-            .map(|block| match block {
-                crate::parsers::Block::V131 {
-                    id,
-                    delay,
-                    rf,
-                    gx,
-                    gy,
-                    gz,
-                    adc,
-                    ext: _,
-                } => {
-                    // TODO: return error if some ID does not exist
-                    let rf = (rf != 0).then(|| rfs[&rf].clone());
-                    let gx = (gx != 0).then(|| gradients[&gx].clone());
-                    let gy = (gy != 0).then(|| gradients[&gy].clone());
-                    let gz = (gz != 0).then(|| gradients[&gz].clone());
-                    let adc = (adc != 0).then(|| adcs[&adc].clone());
-                    let delay = (delay != 0).then(|| delays[&delay]);
+        let blocks = extract_iter!(sections, Blocks)
+            .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
+            .collect::<Result<Vec<Block>, ParseError>>()?;
 
-                    let mut duration: f32 = 0.0;
-                    if let Some(rf) = &rf {
-                        duration = duration.max(rf.duration(time_raster.rf));
-                    }
-                    if let Some(gx) = &gx {
-                        duration = duration.max(gx.duration(time_raster.grad));
-                    }
-                    if let Some(gy) = &gy {
-                        duration = duration.max(gy.duration(time_raster.grad));
-                    }
-                    if let Some(gz) = &gz {
-                        duration = duration.max(gz.duration(time_raster.grad));
-                    }
-                    if let Some(adc) = &adc {
-                        duration = duration.max(adc.duration());
-                    }
-                    if let Some(delay) = delay {
-                        duration = duration.max(delay);
-                    }
-
-                    Block {
-                        id,
-                        duration,
-                        rf,
-                        gx,
-                        gy,
-                        gz,
-                        adc,
-                    }
-                }
-                crate::parsers::Block::V140 {
-                    id,
-                    duration,
-                    rf,
-                    gx,
-                    gy,
-                    gz,
-                    adc,
-                    ext: _,
-                } => Block {
-                    id,
-                    duration: duration as f32 * time_raster.block,
-                    rf: (rf != 0).then(|| rfs[&rf].clone()),
-                    gx: (gx != 0).then(|| gradients[&gx].clone()),
-                    gy: (gy != 0).then(|| gradients[&gy].clone()),
-                    gz: (gz != 0).then(|| gradients[&gz].clone()),
-                    adc: (adc != 0).then(|| adcs[&adc].clone()),
-                },
-            })
-            .collect();
-
-        Self {
+        Ok(Self {
             name,
             fov,
             definitions,
             time_raster,
             blocks,
-        }
+        })
     }
+}
+
+fn convert_block(
+    block: crate::parsers::Block,
+    rfs: &HashMap<u32, Arc<Rf>>,
+    gradients: &HashMap<u32, Arc<Gradient>>,
+    adcs: &HashMap<u32, Arc<Adc>>,
+    delays: &HashMap<u32, f32>,
+    time_raster: &TimeRaster,
+) -> Result<Block, ParseError> {
+    Ok(match block {
+        crate::parsers::Block::V131 {
+            id,
+            delay,
+            rf,
+            gx,
+            gy,
+            gz,
+            adc,
+            ext: _,
+        } => {
+            let rf = (rf != 0)
+                .then(|| rfs.get(&rf).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+            let gx = (gx != 0)
+                .then(|| gradients.get(&gx).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+            let gy = (gy != 0)
+                .then(|| gradients.get(&gy).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+            let gz = (gz != 0)
+                .then(|| gradients.get(&gz).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+            let adc = (adc != 0)
+                .then(|| adcs.get(&adc).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+            let delay = (delay != 0)
+                .then(|| delays.get(&delay).cloned().ok_or(ParseError::Generic))
+                .transpose()?;
+
+            let mut duration: f32 = 0.0;
+            if let Some(rf) = &rf {
+                duration = duration.max(rf.duration(time_raster.rf));
+            }
+            if let Some(gx) = &gx {
+                duration = duration.max(gx.duration(time_raster.grad));
+            }
+            if let Some(gy) = &gy {
+                duration = duration.max(gy.duration(time_raster.grad));
+            }
+            if let Some(gz) = &gz {
+                duration = duration.max(gz.duration(time_raster.grad));
+            }
+            if let Some(adc) = &adc {
+                duration = duration.max(adc.duration());
+            }
+            if let Some(delay) = delay {
+                duration = duration.max(delay);
+            }
+
+            Block {
+                id,
+                duration,
+                rf,
+                gx,
+                gy,
+                gz,
+                adc,
+            }
+        }
+        crate::parsers::Block::V140 {
+            id,
+            duration,
+            rf,
+            gx,
+            gy,
+            gz,
+            adc,
+            ext: _,
+        } => Block {
+            id,
+            duration: duration as f32 * time_raster.block,
+            rf: (rf != 0).then(|| rfs[&rf].clone()),
+            gx: (gx != 0).then(|| gradients[&gx].clone()),
+            gy: (gy != 0).then(|| gradients[&gy].clone()),
+            gz: (gz != 0).then(|| gradients[&gz].clone()),
+            adc: (adc != 0).then(|| adcs[&adc].clone()),
+        },
+    })
 }
