@@ -4,7 +4,6 @@ use std::sync::Arc;
 mod display;
 pub mod from_1_4;
 
-
 pub struct Sequence {
     pub metadata: Metadata,
     pub blocks: Vec<Block>,
@@ -75,18 +74,13 @@ impl Gradient {
     pub fn duration(&self, grad_raster: f32) -> f32 {
         match self {
             // TODO: duration calculation should take time_shape into account
-            Gradient::Free {
-                amp,
-                shape,
-                time,
-                delay,
-            } => delay + shape.0.len() as f32 * grad_raster,
+            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f32 * grad_raster,
             Gradient::Trap {
-                amp,
                 rise,
                 flat,
                 fall,
                 delay,
+                ..
             } => delay + rise + flat + fall,
         }
     }

@@ -58,27 +58,18 @@ impl Sequence {
             .count()
             > 0
         {
-            match extract!(sections, Definitions) {
-                crate::parsers::Definitions {
-                    grad_raster,
-                    rf_raster,
-                    adc_raster,
-                    block_dur_raster,
-                    name,
-                    fov,
-                    ..
-                } => (
-                    block_dur_raster,
-                    Metadata {
-                        name: name,
-                        fov: fov,
-                        grad_raster: grad_raster,
-                        rf_raster: rf_raster,
-                        adc_raster: adc_raster,
-                        block_raster: block_dur_raster,
-                    },
-                ),
-            }
+            let defs = extract!(sections, Definitions);
+            (
+                defs.block_dur_raster,
+                Metadata {
+                    name: defs.name,
+                    fov: defs.fov,
+                    grad_raster: defs.grad_raster,
+                    rf_raster: defs.rf_raster,
+                    adc_raster: defs.adc_raster,
+                    block_raster: defs.block_dur_raster,
+                },
+            )
         } else {
             (
                 10e-6,
@@ -203,7 +194,7 @@ impl Sequence {
 
                     let duration = [rf_dur, gx_dur, gy_dur, gz_dur, delay_dur]
                         .into_iter()
-                        .max_by(|x, y| x.total_cmp(&y))
+                        .max_by(|x, y| x.total_cmp(y))
                         .unwrap();
 
                     Block {
@@ -239,14 +230,4 @@ impl Sequence {
 
         Self { metadata, blocks }
     }
-}
-
-fn parse_fov(s: &String) -> (f32, f32, f32) {
-    let splits: Vec<_> = s.split_whitespace().collect();
-    assert_eq!(splits.len(), 3);
-    (
-        splits[0].parse().unwrap(),
-        splits[1].parse().unwrap(),
-        splits[2].parse().unwrap(),
-    )
 }
