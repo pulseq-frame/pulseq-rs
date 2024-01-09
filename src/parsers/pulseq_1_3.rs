@@ -52,10 +52,6 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
             .unwrap_or(Ok(10e-6))?,
         name: defs.remove("Name"),
         fov: defs.remove("FOV").map(parse_fov).transpose()?,
-        total_duration: defs
-            .remove("TotalDuration")
-            .map(|s| s.parse())
-            .transpose()?,
         rest: defs,
     })
 }

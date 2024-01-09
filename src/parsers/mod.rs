@@ -79,7 +79,6 @@ pub struct Definitions {
     pub block_dur_raster: f32,
     pub name: Option<String>,
     pub fov: Option<(f32, f32, f32)>,
-    pub total_duration: Option<f32>,
     pub rest: HashMap<String, String>,
 }
 
