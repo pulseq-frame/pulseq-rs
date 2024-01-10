@@ -1,9 +1,7 @@
-use sequence::Sequence;
+mod errors;
+mod parse_file;
+mod sequence;
 
-pub mod errors;
-pub mod parse_file;
-pub mod sequence;
-
-pub fn parse_file(source: &str) -> Result<sequence::Sequence, errors::ParseError> {
-    parse_file::parse_file(source).and_then(Sequence::from_parsed_file)
-}
+pub use errors::ParseError;
+pub use parse_file::parse_file;
+pub use sequence::Sequence;

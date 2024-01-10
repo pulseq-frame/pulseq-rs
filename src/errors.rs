@@ -6,4 +6,6 @@ pub enum ParseError {
     Generic,
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 }

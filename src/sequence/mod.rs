@@ -1,7 +1,10 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
-use crate::{errors::ParseError, parse_file::Section};
+use crate::{
+    errors::ParseError,
+    parse_file::{self, Section},
+};
 
 mod display;
 pub mod from_raw;
@@ -17,6 +20,15 @@ pub struct Sequence {
 impl Sequence {
     pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, ParseError> {
         from_raw::from_raw(sections)
+    }
+
+    pub fn from_source(source: &str) -> Result<Self, ParseError> {
+        parse_file::parse_file(source).and_then(Self::from_parsed_file)
+    }
+
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ParseError> {
+        let source = std::fs::read_to_string(path)?;
+        Self::from_source(&source)
     }
 }
 
