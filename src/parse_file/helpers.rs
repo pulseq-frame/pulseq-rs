@@ -1,7 +1,7 @@
 use ezpc::*;
 use std::str::FromStr;
 
-use crate::errors::ParseError;
+use crate::error::ParseError;
 
 // Helper functions
 

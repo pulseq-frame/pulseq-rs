@@ -2,7 +2,7 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
-    errors::ParseError,
+    error,
     parse_file::{self, Section},
 };
 
@@ -18,15 +18,15 @@ pub struct Sequence {
 }
 
 impl Sequence {
-    pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, ParseError> {
-        from_raw::from_raw(sections)
+    pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, error::Error> {
+        Ok(from_raw::from_raw(sections)?)
     }
 
-    pub fn from_source(source: &str) -> Result<Self, ParseError> {
+    pub fn from_source(source: &str) -> Result<Self, error::Error> {
         parse_file::parse_file(source).and_then(Self::from_parsed_file)
     }
 
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ParseError> {
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, error::Error> {
         let source = std::fs::read_to_string(path)?;
         Self::from_source(&source)
     }

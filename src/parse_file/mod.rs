@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::errors::ParseError;
+use crate::error::{ParseError, self};
 
 mod common;
 mod helpers;
@@ -22,7 +22,7 @@ mod pulseq_1_4;
 // vPtx: * Rf extended by two shape IDs for mag and phase shim arrays
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
-pub fn parse_file(source: &str) -> Result<Vec<Section>, ParseError> {
+pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
     let version = (helpers::nl().opt() + common::version() + ezpc::none_of("").repeat(0..))
         .parse_all(source)
         .map_err(|_| ParseError::Generic)?;
@@ -30,15 +30,13 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, ParseError> {
     match version {
         Version {
             major: 1, minor: 3, ..
-        } => pulseq_1_3::file()
-            .parse_all(source)
-            .map_err(|_| ParseError::Generic),
+        } => Ok(pulseq_1_3::file()
+            .parse_all(source)?),
         Version {
             major: 1, minor: 4, ..
-        } => pulseq_1_4::file()
-            .parse_all(source)
-            .map_err(|_| ParseError::Generic),
-        _ => Err(ParseError::Generic),
+        } => Ok(pulseq_1_4::file()
+            .parse_all(source)?),
+        _ => Err(error::Error::UnsupportedVersion(version)),
     }
 }
 

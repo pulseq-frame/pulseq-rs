@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 use crate::{
-    errors::ParseError,
+    error::ParseError,
     parse_file::{BlockDuration, Section},
 };
 
