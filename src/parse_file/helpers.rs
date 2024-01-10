@@ -17,18 +17,26 @@ pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>,
     // First, decompress into the deriviate of the shape
     let mut deriv = Vec::with_capacity(num_samples as usize);
 
+    // The two samples before the current one, to detect RLE
     let mut a = f32::NAN;
     let mut b = f32::NAN;
+    // After a detected RLE, skip the RLE check for two samples
+    let mut skip = 0;
+
     for sample in samples {
-        if a == b {
+        if a == b && skip == 0 {
             if sample != sample.round() {
                 return Err(ParseError::Generic);
             }
+
+            skip = 2;
             for _ in 0..sample as usize {
                 deriv.push(b);
             }
-            b = f32::NAN;
         } else {
+            if skip > 0 {
+                skip -= 1;
+            }
             deriv.push(sample);
         }
 
