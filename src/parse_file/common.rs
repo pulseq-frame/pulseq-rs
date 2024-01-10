@@ -1,7 +1,6 @@
 use ezpc::*;
 
-use super::helpers::*;
-use super::*;
+use super::{helpers::*, *};
 
 // Parsers for things that didn't change within the supported pulseq versions
 

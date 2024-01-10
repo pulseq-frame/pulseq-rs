@@ -1,6 +1,9 @@
-pub mod parsers;
+use sequence::Sequence;
+
+pub mod errors;
+pub mod parse_file;
 pub mod sequence;
 
-pub fn parse_file(source: &str) -> Result<sequence::Sequence, parsers::helpers::ParseError> {
-    parsers::parse_file(source).and_then(sequence::Sequence::from_1_4)
+pub fn parse_file(source: &str) -> Result<sequence::Sequence, errors::ParseError> {
+    parse_file::parse_file(source).and_then(Sequence::from_parsed_file)
 }

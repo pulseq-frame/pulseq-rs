@@ -1,8 +1,10 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
 use std::{collections::HashMap, sync::Arc};
 
+use crate::{errors::ParseError, parse_file::Section};
+
 mod display;
-pub mod from_1_4;
+pub mod from_raw;
 
 pub struct Sequence {
     pub time_raster: TimeRaster,
@@ -10,6 +12,12 @@ pub struct Sequence {
     pub fov: Option<(f32, f32, f32)>,
     pub definitions: HashMap<String, String>,
     pub blocks: Vec<Block>,
+}
+
+impl Sequence {
+    pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, ParseError> {
+        from_raw::from_raw(sections)
+    }
 }
 
 /// Before pulseq 1.4, definitions were not enforced. But despite this, the

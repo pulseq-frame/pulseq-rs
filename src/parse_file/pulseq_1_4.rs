@@ -1,7 +1,6 @@
 use ezpc::*;
 
-use super::helpers::*;
-use super::*;
+use super::{helpers::*, *};
 use common::*;
 
 pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {

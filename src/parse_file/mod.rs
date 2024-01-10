@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use self::helpers::ParseError;
+use crate::errors::ParseError;
 
-pub mod common;
-pub mod helpers;
-pub mod pulseq_1_3;
-pub mod pulseq_1_4;
+mod common;
+mod helpers;
+mod pulseq_1_3;
+mod pulseq_1_4;
 
 // Pulseq is parsed into the following structs, which are modelled after the
 // newest supported pulseq version. Older versions need to convert the data.
