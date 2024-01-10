@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use super::*;
 use crate::{
@@ -22,6 +22,21 @@ macro_rules! extract {
     }};
 }
 
+fn convert_sec<Data, Key: Eq + Hash, Val, F: Fn(Data) -> (Key, Val)>(
+    sec_data: Vec<Vec<Data>>,
+    f: F,
+) -> Result<HashMap<Key, Val>, ParseError> {
+    let tmp: Vec<_> = sec_data.into_iter().flatten().map(f).collect();
+    let count = tmp.len();
+    let tmp: HashMap<_, _> = tmp.into_iter().collect();
+
+    if tmp.len() < count {
+        Err(ParseError::Generic)
+    } else {
+        Ok(tmp)
+    }
+}
+
 pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
     // Destructure into single section or return error
     let [version]: [Version; 1] = extract!(sections, Version)
@@ -34,87 +49,71 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         .collect();
     let (name, fov, definitions, time_raster) = convert_defs(&version, defs)?;
 
-    // TODO: if some ID exists more than once in the file, we overwrite it.
+    let shapes = convert_sec(extract!(sections, Shapes), |shape| {
+        (shape.id, Arc::new(Shape(shape.samples)))
+    })?;
 
-    let shapes: HashMap<_, _> = extract!(sections, Shapes)
-        .into_iter()
-        .flatten()
-        .map(|shape| (shape.id, Arc::new(Shape(shape.samples))))
-        .collect();
+    let delays = convert_sec(extract!(sections, Delays), |delay| (delay.id, delay.delay))?;
+    let adcs = convert_sec(extract!(sections, Adcs), |adc| {
+        (
+            adc.id,
+            Arc::new(Adc {
+                num: adc.num,
+                dwell: adc.dwell,
+                delay: adc.delay,
+                freq: adc.freq,
+                phase: adc.phase,
+            }),
+        )
+    })?;
+    let rfs = convert_sec(extract!(sections, Rfs), |rf| {
+        (
+            rf.id,
+            Arc::new(Rf {
+                amp: rf.amp,
+                phase: rf.phase,
+                amp_shape: shapes[&rf.mag_id].clone(),
+                phase_shape: shapes[&rf.phase_id].clone(),
+                time_shape: (rf.time_id != 0).then(|| shapes[&rf.time_id].clone()),
+                delay: rf.delay,
+                freq: rf.freq,
+            }),
+        )
+    })?;
+    let mut gradients = convert_sec(extract!(sections, Gradients), |grad| {
+        (
+            grad.id,
+            Arc::new(Gradient::Free {
+                amp: grad.amp,
+                shape: shapes[&grad.shape_id].clone(),
+                time: if grad.time_id == 0 {
+                    None
+                } else {
+                    Some(shapes[&grad.time_id].clone())
+                },
+                delay: grad.delay,
+            }),
+        )
+    })?;
+    let traps = convert_sec(extract!(sections, Traps), |trap| {
+        (
+            trap.id,
+            Arc::new(Gradient::Trap {
+                amp: trap.amp,
+                rise: trap.rise,
+                flat: trap.flat,
+                fall: trap.fall,
+                delay: trap.delay,
+            }),
+        )
+    })?;
 
-    let adcs: HashMap<_, _> = extract!(sections, Adcs)
-        .into_iter()
-        .flatten()
-        .map(|adc| {
-            (
-                adc.id,
-                Arc::new(Adc {
-                    num: adc.num,
-                    dwell: adc.dwell,
-                    delay: adc.delay,
-                    freq: adc.freq,
-                    phase: adc.phase,
-                }),
-            )
-        })
-        .collect();
-
-    let delays: HashMap<_, _> = extract!(sections, Delays)
-        .into_iter()
-        .flatten()
-        .map(|delay| (delay.id, delay.delay))
-        .collect();
-
-    let gradients: HashMap<_, _> = extract!(sections, Gradients)
-        .into_iter()
-        .flatten()
-        .map(|grad| {
-            (
-                grad.id,
-                Arc::new(Gradient::Free {
-                    amp: grad.amp,
-                    shape: shapes[&grad.shape_id].clone(),
-                    time: if grad.time_id == 0 {
-                        None
-                    } else {
-                        Some(shapes[&grad.time_id].clone())
-                    },
-                    delay: grad.delay,
-                }),
-            )
-        })
-        .chain(extract!(sections, Traps).into_iter().flatten().map(|trap| {
-            (
-                trap.id,
-                Arc::new(Gradient::Trap {
-                    amp: trap.amp,
-                    rise: trap.rise,
-                    flat: trap.flat,
-                    fall: trap.fall,
-                    delay: trap.delay,
-                }),
-            )
-        }))
-        .collect();
-
-    let rfs: HashMap<_, _> = extract!(sections, Rfs)
-        .into_iter()
-        .flatten()
-        .map(|rf| {
-            (
-                rf.id,
-                Arc::new(Rf {
-                    amp: rf.amp,
-                    phase: rf.phase,
-                    amp_shape: shapes[&rf.mag_id].clone(),
-                    phase_shape: shapes[&rf.phase_id].clone(),
-                    time_shape: (rf.time_id != 0).then(|| shapes[&rf.time_id].clone()),
-                    delay: rf.delay,
-                    freq: rf.freq,
-                }),
-            )
-        })
-        .collect();
+    // Gradients and Traps share keys
+    let count = gradients.len() + traps.len();
+    gradients.extend(traps.into_iter());
+    if gradients.len() < count {
+        return Err(ParseError::Generic);
+    }
 
     let blocks = extract!(sections, Blocks)
         .into_iter()
