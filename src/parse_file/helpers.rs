@@ -5,14 +5,6 @@ use crate::error::ParseError;
 
 // Helper functions
 
-pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
-    let splits: Vec<_> = s.split_whitespace().collect();
-    if splits.len() != 3 {
-        return Err(ParseError::Generic);
-    }
-    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
-}
-
 pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
     // First, decompress into the deriviate of the shape
     let mut deriv = Vec::with_capacity(num_samples as usize);

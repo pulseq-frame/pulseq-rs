@@ -31,48 +31,9 @@ pub fn version() -> Parser<impl Parse<Output = Version>> {
     )
 }
 
-pub fn definitions() -> Parser<impl Parse<Output = Definitions>> {
-    raw_definitions().convert(parse_defs, "Failed to parse definitions")
-}
-
-pub fn raw_definitions() -> Parser<impl Parse<Output = Vec<(String, String)>>> {
+pub fn definitions() -> Parser<impl Parse<Output = Vec<(String, String)>>> {
     let def = ident() + ws() + none_of("\n").repeat(1..).map(|s| s.trim().to_owned()) + nl();
     tag_nl("[DEFINITIONS]") + def.repeat(1..)
-}
-
-pub fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
-    let mut defs: HashMap<_, _> = defs.into_iter().collect();
-
-    // Before pulseq 1.4, defining raster times was not mandatory. This is a
-    // flaw in the specification, because without the raster time, the duration
-    // of RF pulses and non-trap gradients is completely undefined. The
-    // official Siemens interpreter uses default values for missing raster
-    // times, which can be seen as the ground truth even if not given by the
-    // specification.
-
-    // TODO: Remove duplication with TimeRaster default impl
-
-    Ok(Definitions {
-        grad_raster: defs
-            .remove("GradientRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(10e-6))?,
-        rf_raster: defs
-            .remove("RadiofrequencyRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(1e-6))?,
-        adc_raster: defs
-            .remove("AdcRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(0.1e-6))?,
-        block_dur_raster: defs
-            .remove("BlockDurationRaster")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(10e-6))?,
-        name: defs.remove("Name"),
-        fov: defs.remove("FOV").map(parse_fov).transpose()?,
-        rest: defs,
-    })
 }
 
 pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {

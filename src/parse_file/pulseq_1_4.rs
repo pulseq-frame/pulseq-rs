@@ -1,6 +1,6 @@
 use ezpc::*;
 
-use super::pulseq_1_2::{adcs, raw_definitions, raw_shape, traps, version};
+use super::pulseq_1_2::{adcs, definitions, raw_shape, traps, version};
 use super::pulseq_1_3::extensions;
 use super::{helpers::*, *};
 
@@ -19,7 +19,7 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
         .repeat(0..)
 }
 
-fn signature() -> Parser<impl Parse<Output = Signature>> {
+pub fn signature() -> Parser<impl Parse<Output = Signature>> {
     let typ = tag_ws("Type")
         + is_a(char::is_alphanumeric)
             .repeat(1..)
@@ -30,37 +30,7 @@ fn signature() -> Parser<impl Parse<Output = Signature>> {
     (tag_nl("[SIGNATURE]") + typ + hash).map(|(typ, hash)| Signature { typ, hash })
 }
 
-fn definitions() -> Parser<impl Parse<Output = Definitions>> {
-    raw_definitions().convert(parse_defs, "Failed to parse definitions")
-}
-
-fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
-    let mut defs: HashMap<_, _> = defs.into_iter().collect();
-
-    Ok(Definitions {
-        grad_raster: defs
-            .remove("GradientRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        rf_raster: defs
-            .remove("RadiofrequencyRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        adc_raster: defs
-            .remove("AdcRasterTime")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        block_dur_raster: defs
-            .remove("BlockDurationRaster")
-            .ok_or(ParseError::Generic)?
-            .parse()?,
-        name: defs.remove("Name"),
-        fov: defs.remove("FOV").map(parse_fov).transpose()?,
-        rest: defs,
-    })
-}
-
-fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
+pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
     let block = (ws().opt() + int() + (ws() + int()).repeat(7)).map(|(id, tags)| Block {
         id,
         dur: BlockDuration::Duration(tags[0]),
@@ -74,7 +44,7 @@ fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
     tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
 }
 
-fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
+pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     let i = || ws() + int();
     let f = || ws() + float();
     let rf = (ws().opt() + int() + f() + i() + i() + i() + i() + f() + f()).map(
@@ -92,7 +62,7 @@ fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     tag_nl("[RF]") + (rf + nl()).repeat(1..)
 }
 
-fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
+pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
     let i = || ws() + int();
     let f = ws() + float();
     let grad = (ws().opt() + int() + f + i() + i() + i()).map(
@@ -107,7 +77,7 @@ fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
 }
 
-fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
+pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
     let shape = raw_shape().convert(
         |(id, (num_samples, samples))| {
             if samples.len() == num_samples as usize {

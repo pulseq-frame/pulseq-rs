@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::*;
 use crate::{
     error::ParseError,
-    parse_file::{BlockDuration, Section},
+    parse_file::{BlockDuration, Section, Version},
 };
 
 macro_rules! extract {
@@ -52,7 +52,10 @@ macro_rules! extract_iter {
 }
 
 pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
-    // TODO: throw an error if definitions are missing in a 1.4 file
+    // NOTE: a panic here is okay since without a version, the file should not even have parsed
+    let version = extract!(sections, Version);
+
+    // Check if definitions block exists
     let (name, fov, definitions, time_raster) = if sections
         .iter()
         .filter(|&s| matches!(s, Section::Definitions(_)))
@@ -60,17 +63,47 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         > 0
     {
         let defs = extract!(sections, Definitions);
-        (
-            defs.name,
-            defs.fov,
-            defs.rest,
-            TimeRaster {
-                grad: defs.grad_raster,
-                rf: defs.rf_raster,
-                adc: defs.adc_raster,
-                block: defs.block_dur_raster,
-            },
-        )
+        let def_count = defs.len();
+        let mut defs: HashMap<_, _> = defs.into_iter().collect();
+        if defs.len() < def_count {
+            // Duplicated key
+            return Err(ParseError::Generic);
+        }
+
+        // Before version 1.4, nothing about the contents of definitions was specified
+        if matches!(
+            version,
+            Version {
+                major: 1,
+                minor: 4,
+                ..
+            }
+        ) {
+            let time_raster = TimeRaster {
+                grad: defs
+                    .remove("GradientRasterTime")
+                    .ok_or(ParseError::Generic)?
+                    .parse()?,
+                rf: defs
+                    .remove("RadiofrequencyRasterTime")
+                    .ok_or(ParseError::Generic)?
+                    .parse()?,
+                adc: defs
+                    .remove("AdcRasterTime")
+                    .ok_or(ParseError::Generic)?
+                    .parse()?,
+                block: defs
+                    .remove("BlockDurationRaster")
+                    .ok_or(ParseError::Generic)?
+                    .parse()?,
+            };
+            let name = defs.remove("Name");
+            let fov = defs.remove("FOV").map(parse_fov).transpose()?;
+
+            (name, fov, defs, time_raster)
+        } else {
+            (None, None, defs, TimeRaster::default())
+        }
     } else {
         (None, None, HashMap::new(), TimeRaster::default())
     };
@@ -215,4 +248,12 @@ fn convert_block(
         gz,
         adc,
     })
+}
+
+pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
+    let splits: Vec<_> = s.split_whitespace().collect();
+    if splits.len() != 3 {
+        return Err(ParseError::Generic);
+    }
+    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
 }

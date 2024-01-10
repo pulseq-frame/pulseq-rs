@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::error::{self, ParseError};
 
 mod helpers;
@@ -45,7 +43,7 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
 pub enum Section {
     Version(Version),
     Signature(Signature),
-    Definitions(Definitions),
+    Definitions(Vec<(String, String)>),
     Blocks(Vec<Block>),
     Rfs(Vec<Rf>),
     Gradients(Vec<Gradient>),
@@ -68,17 +66,6 @@ pub struct Version {
 pub struct Signature {
     pub typ: String,
     pub hash: String,
-}
-
-#[derive(Debug)]
-pub struct Definitions {
-    pub grad_raster: f32,
-    pub rf_raster: f32,
-    pub adc_raster: f32,
-    pub block_dur_raster: f32,
-    pub name: Option<String>,
-    pub fov: Option<(f32, f32, f32)>,
-    pub rest: HashMap<String, String>,
 }
 
 #[derive(Debug)]
