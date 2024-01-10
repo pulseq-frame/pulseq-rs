@@ -17,10 +17,8 @@ def shell(*args):
 # 1.3.1, 1.3.1.post1,
 # 1.4.0
 
-# Only the newest verions include their example scripts. The only backwards-
-# incompatible changes in the file format were between 1.3 and 1.4, so testing
-# those two versions should be sufficient.
-versions = ["1.3.1.post1", "1.4.0"]
+# The scanner itself only supports pulseq 1.2+, so that's what we're testing
+versions = ["1.2.0.post4", "1.3.1.post1", "1.4.0"]
 
 cwd = path.dirname(__file__)
 assets_dir = path.join(cwd, "..", "assets")

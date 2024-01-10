@@ -17,7 +17,6 @@ from pypulseq.seq_examples.scripts import write_haste
 from pypulseq.seq_examples.scripts import write_tse
 from pypulseq.seq_examples.scripts import write_ute
 
-print(os.getcwd())
 os.replace("epi_pypulseq.seq", "assets/1.3.1.post1/epi.seq")
 os.replace("epi_se_pypulseq.seq", "assets/1.3.1.post1/epi_se.seq")
 os.replace("epi_se_rs_pypulseq.seq", "assets/1.3.1.post1/epi_se_rs.seq")
