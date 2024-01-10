@@ -1,6 +1,6 @@
 use ezpc::*;
 
-use super::pulseq_1_2::{adcs, definitions, delays, shapes, traps, version};
+use super::pulseq_1_2::{adcs, definitions, delays, gradients, rfs, shapes, traps, version};
 use super::{helpers::*, *};
 
 pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
@@ -30,38 +30,6 @@ fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
         ext: tags[6],
     });
     tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
-}
-
-fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
-    let i = || ws() + int();
-    let f = || ws() + float();
-    let rf = (ws().opt() + int() + f() + i() + i() + i() + f() + f()).map(
-        |((((((id, amp), mag_id), phase_id), delay), freq), phase)| Rf {
-            id,
-            amp,
-            mag_id,
-            phase_id,
-            time_id: 0,
-            delay: delay as f32 * 1e-6,
-            freq,
-            phase,
-        },
-    );
-    tag_nl("[RF]") + (rf + nl()).repeat(1..)
-}
-
-fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
-    let i = || ws() + int();
-    let f = ws() + float();
-    let grad =
-        (ws().opt() + int() + f + i() + i()).map(|(((id, amp), shape_id), delay)| Gradient {
-            id,
-            amp,
-            shape_id,
-            time_id: 0,
-            delay: delay as f32 * 1e-6,
-        });
-    tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
 }
 
 pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {

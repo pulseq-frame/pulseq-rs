@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::error::{self, ParseError};
 
-mod common;
 mod helpers;
 mod pulseq_1_2;
 mod pulseq_1_3;
@@ -24,7 +23,7 @@ mod pulseq_1_4;
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
 pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
-    let version = (helpers::nl().opt() + common::version() + ezpc::none_of("").repeat(0..))
+    let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
         .parse_all(source)
         .map_err(|_| ParseError::Generic)?;
 

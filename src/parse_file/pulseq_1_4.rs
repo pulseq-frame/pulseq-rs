@@ -1,7 +1,8 @@
 use ezpc::*;
 
+use super::pulseq_1_2::{adcs, raw_definitions, raw_shape, traps, version};
+use super::pulseq_1_3::extensions;
 use super::{helpers::*, *};
-use common::*;
 
 pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
     nl().opt()

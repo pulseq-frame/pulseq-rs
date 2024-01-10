@@ -84,13 +84,12 @@ pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
         gy: tags[3],
         gz: tags[4],
         adc: tags[5],
-        ext: 0, // Modified: 1.2 doesn't have extensions
+        ext: 0,
     });
     tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
 }
 
 pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
-    // same as 1.3
     let i = || ws() + int();
     let f = || ws() + float();
     let rf = (ws().opt() + int() + f() + i() + i() + i() + f() + f()).map(
