@@ -1,7 +1,8 @@
-use ezpc::EzpcError;
 use thiserror::Error;
 
 use crate::parse_file::Version;
+
+// TODO: Errors must be improved - by a LOT
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -13,20 +14,12 @@ pub enum ParseError {
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Parse error")]
-    EzpcError(String),
+    #[error(transparent)]
+    EzpcError(#[from] ezpc::EzpcError),
     #[error(transparent)]
     ParseError(#[from] ParseError),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
     #[error("Found unsupported version: {}.{}", .0.major, .0.minor)]
     UnsupportedVersion(Version),
-}
-
-/// TODO: There is a problem with lifetimes, maybe Ezpc should be changed so that
-/// the error type does not contain a reference to the source anymore...
-impl<'a> From<EzpcError<'a>> for Error {
-    fn from(value: EzpcError<'a>) -> Self {
-        Error::EzpcError(value.to_string())
-    }
 }
