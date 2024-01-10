@@ -8,113 +8,43 @@ use crate::{
 
 macro_rules! extract {
     ($sections:expr, $variant:ident) => {{
-        assert_eq!(
-            $sections
-                .iter()
-                .filter(|sec| matches!(sec, Section::$variant(_)))
-                .count(),
-            1
-        );
-        let idx = $sections
+        let mut extracted = Vec::new();
+        while let Some(index) = $sections
             .iter()
-            .position(|sec| matches!(sec, Section::$variant(_)))
-            .unwrap();
-        let tmp = $sections.swap_remove(idx);
-        match tmp {
-            Section::$variant(ret) => ret,
-            _ => unreachable!(),
-        }
-    }};
-}
-
-macro_rules! extract_iter {
-    ($sections:expr, $variant:ident) => {{
-        assert!(
-            $sections
-                .iter()
-                .filter(|sec| matches!(sec, Section::$variant(_)))
-                .count()
-                < 2
-        );
-        if let Some(idx) = $sections
-            .iter()
-            .position(|sec| matches!(sec, Section::$variant(_)))
+            .position(|x| matches!(x, Section::$variant(_)))
         {
-            let tmp = $sections.swap_remove(idx);
-            match tmp {
-                Section::$variant(ret) => ret.into_iter(),
+            match $sections.swap_remove(index) {
+                Section::$variant(section_data) => extracted.push(section_data),
                 _ => unreachable!(),
             }
-        } else {
-            Vec::new().into_iter()
         }
+        extracted
     }};
 }
 
 pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
-    // NOTE: a panic here is okay since without a version, the file should not even have parsed
-    let version = extract!(sections, Version);
+    // Destructure into single section or return error
+    let [version]: [Version; 1] = extract!(sections, Version)
+        .try_into()
+        .map_err(|_| ParseError::Generic)?;
 
-    // Check if definitions block exists
-    let (name, fov, definitions, time_raster) = if sections
-        .iter()
-        .filter(|&s| matches!(s, Section::Definitions(_)))
-        .count()
-        > 0
-    {
-        let defs = extract!(sections, Definitions);
-        let def_count = defs.len();
-        let mut defs: HashMap<_, _> = defs.into_iter().collect();
-        if defs.len() < def_count {
-            // Duplicated key
-            return Err(ParseError::Generic);
-        }
-
-        // Before version 1.4, nothing about the contents of definitions was specified
-        if matches!(
-            version,
-            Version {
-                major: 1,
-                minor: 4,
-                ..
-            }
-        ) {
-            let time_raster = TimeRaster {
-                grad: defs
-                    .remove("GradientRasterTime")
-                    .ok_or(ParseError::Generic)?
-                    .parse()?,
-                rf: defs
-                    .remove("RadiofrequencyRasterTime")
-                    .ok_or(ParseError::Generic)?
-                    .parse()?,
-                adc: defs
-                    .remove("AdcRasterTime")
-                    .ok_or(ParseError::Generic)?
-                    .parse()?,
-                block: defs
-                    .remove("BlockDurationRaster")
-                    .ok_or(ParseError::Generic)?
-                    .parse()?,
-            };
-            let name = defs.remove("Name");
-            let fov = defs.remove("FOV").map(parse_fov).transpose()?;
-
-            (name, fov, defs, time_raster)
-        } else {
-            (None, None, defs, TimeRaster::default())
-        }
-    } else {
-        (None, None, HashMap::new(), TimeRaster::default())
-    };
+    let defs: Vec<_> = extract!(sections, Definitions)
+        .into_iter()
+        .flatten()
+        .collect();
+    let (name, fov, definitions, time_raster) = convert_defs(&version, defs)?;
 
     // TODO: if some ID exists more than once in the file, we overwrite it.
 
-    let shapes: HashMap<_, _> = extract_iter!(sections, Shapes)
+    let shapes: HashMap<_, _> = extract!(sections, Shapes)
+        .into_iter()
+        .flatten()
         .map(|shape| (shape.id, Arc::new(Shape(shape.samples))))
         .collect();
 
-    let adcs: HashMap<_, _> = extract_iter!(sections, Adcs)
+    let adcs: HashMap<_, _> = extract!(sections, Adcs)
+        .into_iter()
+        .flatten()
         .map(|adc| {
             (
                 adc.id,
@@ -129,11 +59,15 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         })
         .collect();
 
-    let delays: HashMap<_, _> = extract_iter!(sections, Delays)
+    let delays: HashMap<_, _> = extract!(sections, Delays)
+        .into_iter()
+        .flatten()
         .map(|delay| (delay.id, delay.delay))
         .collect();
 
-    let gradients: HashMap<_, _> = extract_iter!(sections, Gradients)
+    let gradients: HashMap<_, _> = extract!(sections, Gradients)
+        .into_iter()
+        .flatten()
         .map(|grad| {
             (
                 grad.id,
@@ -149,7 +83,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
                 }),
             )
         })
-        .chain(extract_iter!(sections, Traps).map(|trap| {
+        .chain(extract!(sections, Traps).into_iter().flatten().map(|trap| {
             (
                 trap.id,
                 Arc::new(Gradient::Trap {
@@ -163,7 +97,9 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         }))
         .collect();
 
-    let rfs: HashMap<_, _> = extract_iter!(sections, Rfs)
+    let rfs: HashMap<_, _> = extract!(sections, Rfs)
+        .into_iter()
+        .flatten()
         .map(|rf| {
             (
                 rf.id,
@@ -180,7 +116,9 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         })
         .collect();
 
-    let blocks = extract_iter!(sections, Blocks)
+    let blocks = extract!(sections, Blocks)
+        .into_iter()
+        .flatten()
         .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
         .collect::<Result<Vec<Block>, ParseError>>()?;
 
@@ -191,6 +129,63 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
         time_raster,
         blocks,
     })
+}
+
+fn convert_defs(
+    version: &Version,
+    defs: Vec<(String, String)>,
+) -> Result<
+    (
+        Option<String>,
+        Option<(f32, f32, f32)>,
+        HashMap<String, String>,
+        TimeRaster,
+    ),
+    ParseError,
+> {
+    let def_count = defs.len();
+    let mut defs: HashMap<_, _> = defs.into_iter().collect();
+    if defs.len() < def_count {
+        // Duplicated key
+        return Err(ParseError::Generic);
+    }
+
+    // Before 1.4, there is no spec on what's inside of a definition, so we
+    // just directly return. Raster times are not exported by older exporters,
+    // so we don't need to waste time trying to parse them.
+    if !matches!(
+        version,
+        Version {
+            major: 1,
+            minor: 4,
+            ..
+        }
+    ) {
+        return Ok((None, None, defs, TimeRaster::default()));
+    }
+
+    let time_raster = TimeRaster {
+        grad: defs
+            .remove("GradientRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        rf: defs
+            .remove("RadiofrequencyRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        adc: defs
+            .remove("AdcRasterTime")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+        block: defs
+            .remove("BlockDurationRaster")
+            .ok_or(ParseError::Generic)?
+            .parse()?,
+    };
+    let name = defs.remove("Name");
+    let fov = defs.remove("FOV").map(parse_fov).transpose()?;
+
+    Ok((name, fov, defs, time_raster))
 }
 
 fn convert_block(
