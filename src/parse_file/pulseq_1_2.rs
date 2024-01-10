@@ -1,11 +1,6 @@
 use ezpc::*;
 
 use super::{helpers::*, *};
-use common::*;
-
-// TODO: would be cleaner to build the different file versions up on each other:
-// start with a full 1.2 parser (no common files), then in the 1.3 parser re-export
-// all unchanged parsers and only re-define what changed, 1.4 do the same based on 1.3
 
 pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
     nl().opt()
@@ -17,17 +12,35 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
             | traps().map(Section::Traps)
             | adcs().map(Section::Adcs)
             | delays().map(Section::Delays)
-            // Modified: no extensions
             | shapes().map(Section::Shapes))
         .repeat(0..)
 }
 
-fn definitions() -> Parser<impl Parse<Output = Definitions>> {
-    // not modified compared to 1.3
+pub fn version() -> Parser<impl Parse<Output = Version>> {
+    let major = tag_ws("major") + int() + nl();
+    let minor = tag_ws("minor") + int() + nl();
+    let revision = tag_ws("revision") + int() + ident().opt() + nl();
+
+    (tag_nl("[VERSION]") + major + minor + revision).map(
+        |((major, minor), (revision, rev_suppl))| Version {
+            major,
+            minor,
+            revision,
+            rev_suppl,
+        },
+    )
+}
+
+pub fn definitions() -> Parser<impl Parse<Output = Definitions>> {
     raw_definitions().convert(parse_defs, "Failed to parse definitions")
 }
 
-fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
+pub fn raw_definitions() -> Parser<impl Parse<Output = Vec<(String, String)>>> {
+    let def = ident() + ws() + none_of("\n").repeat(1..).map(|s| s.trim().to_owned()) + nl();
+    tag_nl("[DEFINITIONS]") + def.repeat(1..)
+}
+
+pub fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
     let mut defs: HashMap<_, _> = defs.into_iter().collect();
 
     // Before pulseq 1.4, defining raster times was not mandatory. This is a
@@ -36,6 +49,8 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
     // official Siemens interpreter uses default values for missing raster
     // times, which can be seen as the ground truth even if not given by the
     // specification.
+
+    // TODO: Remove duplication with TimeRaster default impl
 
     Ok(Definitions {
         grad_raster: defs
@@ -60,7 +75,7 @@ fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
     })
 }
 
-fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
+pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
     let block = (ws().opt() + int() + (ws() + int()).repeat(6)).map(|(id, tags)| Block {
         id,
         dur: BlockDuration::DelayId(tags[0]),
@@ -74,7 +89,7 @@ fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
     tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
 }
 
-fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
+pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     // same as 1.3
     let i = || ws() + int();
     let f = || ws() + float();
@@ -93,7 +108,7 @@ fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     tag_nl("[RF]") + (rf + nl()).repeat(1..)
 }
 
-fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
+pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
     let i = || ws() + int();
     let f = ws() + float();
     let grad =
@@ -107,7 +122,39 @@ fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
 }
 
-fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
+pub fn traps() -> Parser<impl Parse<Output = Vec<Trap>>> {
+    let i = || ws() + int();
+    let f = ws() + float();
+    let trap = (ws().opt() + int() + f + i() + i() + i() + i()).map(
+        |(((((id, amp), rise), flat), fall), delay)| Trap {
+            id,
+            amp,
+            rise: rise as f32 * 1e-6,
+            flat: flat as f32 * 1e-6,
+            fall: fall as f32 * 1e-6,
+            delay: delay as f32 * 1e-6,
+        },
+    );
+    tag_nl("[TRAP]") + (trap + nl()).repeat(1..)
+}
+
+pub fn adcs() -> Parser<impl Parse<Output = Vec<Adc>>> {
+    let i = || ws() + int();
+    let f = || ws() + float();
+    let adc = (ws().opt() + int() + i() + f() + i() + f() + f()).map(
+        |(((((id, num), dwell), delay), freq), phase)| Adc {
+            id,
+            num,
+            dwell: dwell * 1e-9,
+            delay: delay as f32 * 1e-6,
+            freq,
+            phase,
+        },
+    );
+    tag_nl("[ADC]") + (adc + nl()).repeat(1..)
+}
+
+pub fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
     let delay = (ws().opt() + int() + ws() + float()).map(|(id, delay)| Delay {
         id,
         delay: delay * 1e-6,
@@ -115,7 +162,15 @@ fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
     tag_nl("[DELAYS]") + (delay + nl()).repeat(1..)
 }
 
-fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
+pub fn raw_shape() -> Parser<impl Parse<Output = (u32, (u32, Vec<f32>))>> {
+    // The spec and the exporter use different tags, we allow both.
+    let shape_id = (tag_ws("Shape_ID") | tag_ws("shape_id")) + int() + nl();
+    let num_samples = (tag_ws("Num_Uncompressed") | tag_ws("num_samples")) + int() + nl();
+    let samples = num_samples + (ws().opt() + float() + nl()).repeat(1..);
+    shape_id + samples
+}
+
+pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
     let shape = raw_shape().convert(
         |(id, (num_samples, samples))| {
             decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })

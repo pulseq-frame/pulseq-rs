@@ -1,7 +1,7 @@
 use ezpc::*;
 
+use super::pulseq_1_2::{adcs, definitions, delays, shapes, traps, version};
 use super::{helpers::*, *};
-use common::*;
 
 pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
     nl().opt()
@@ -16,43 +16,6 @@ pub fn file() -> Parser<impl Parse<Output = Vec<Section>>> {
             | extensions().map(Section::Extensions)
             | shapes().map(Section::Shapes))
         .repeat(0..)
-}
-
-fn definitions() -> Parser<impl Parse<Output = Definitions>> {
-    raw_definitions().convert(parse_defs, "Failed to parse definitions")
-}
-
-fn parse_defs(defs: Vec<(String, String)>) -> Result<Definitions, ParseError> {
-    let mut defs: HashMap<_, _> = defs.into_iter().collect();
-
-    // Before pulseq 1.4, defining raster times was not mandatory. This is a
-    // flaw in the specification, because without the raster time, the duration
-    // of RF pulses and non-trap gradients is completely undefined. The
-    // official Siemens interpreter uses default values for missing raster
-    // times, which can be seen as the ground truth even if not given by the
-    // specification.
-
-    Ok(Definitions {
-        grad_raster: defs
-            .remove("GradientRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(10e-6))?,
-        rf_raster: defs
-            .remove("RadiofrequencyRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(1e-6))?,
-        adc_raster: defs
-            .remove("AdcRasterTime")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(0.1e-6))?,
-        block_dur_raster: defs
-            .remove("BlockDurationRaster")
-            .map(|s| s.parse())
-            .unwrap_or(Ok(10e-6))?,
-        name: defs.remove("Name"),
-        fov: defs.remove("FOV").map(parse_fov).transpose()?,
-        rest: defs,
-    })
 }
 
 fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
@@ -101,20 +64,27 @@ fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
 }
 
-fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
-    let delay = (ws().opt() + int() + ws() + float()).map(|(id, delay)| Delay {
-        id,
-        delay: delay * 1e-6,
-    });
-    tag_nl("[DELAYS]") + (delay + nl()).repeat(1..)
-}
-
-fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
-    let shape = raw_shape().convert(
-        |(id, (num_samples, samples))| {
-            decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
+pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {
+    let rest_of_line = none_of("\n").repeat(1..).map(|s| s.trim().to_owned());
+    let i = || ws() + int();
+    let ext_ref =
+        (ws().opt() + int() + i() + i() + i() + nl()).map(|(((id, spec_id), obj_id), next)| {
+            ExtensionRef {
+                id,
+                spec_id,
+                obj_id,
+                next,
+            }
+        });
+    let ext_obj =
+        (ws().opt() + int() + rest_of_line + nl()).map(|(id, data)| ExtensionObject { id, data });
+    let ext_spec = (tag_ws("extension") + ident() + ws() + int() + nl() + ext_obj.repeat(1..)).map(
+        |((name, id), instances)| ExtensionSpec {
+            id,
+            name,
+            instances,
         },
-        "Failed to decompress shape",
     );
-    tag_nl("[SHAPES]") + shape.repeat(1..)
+    (tag_nl("[EXTENSIONS]") + ext_ref.repeat(1..) + ext_spec.repeat(1..))
+        .map(|(refs, specs)| Extensions { refs, specs })
 }
