@@ -2,7 +2,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use super::*;
 use crate::{
-    error::ParseError,
+    error::{ConversionError, MissingDefinition, ParseFovError, SectionType},
     parse_file::{BlockDuration, Section, Version},
 };
 
@@ -23,38 +23,47 @@ macro_rules! extract {
 }
 
 fn convert_sec<Data, Key: Eq + Hash, Val, F: Fn(Data) -> (Key, Val)>(
+    ty: SectionType,
     sec_data: Vec<Vec<Data>>,
     f: F,
-) -> Result<HashMap<Key, Val>, ParseError> {
+) -> Result<HashMap<Key, Val>, ConversionError> {
     let tmp: Vec<_> = sec_data.into_iter().flatten().map(f).collect();
     let count = tmp.len();
     let tmp: HashMap<_, _> = tmp.into_iter().collect();
 
     if tmp.len() < count {
-        Err(ParseError::Generic)
+        Err(ConversionError::EventIdReuse(ty))
     } else {
         Ok(tmp)
     }
 }
 
-pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
+pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError> {
     // Destructure into single section or return error
     let [version]: [Version; 1] = extract!(sections, Version)
         .try_into()
-        .map_err(|_| ParseError::Generic)?;
+        .map_err(|v: Vec<Version>| ConversionError::VersionSectionCount(v.len()))?;
 
-    let defs: Vec<_> = extract!(sections, Definitions)
-        .into_iter()
-        .flatten()
-        .collect();
-    let (name, fov, definitions, time_raster) = convert_defs(&version, defs)?;
+    let Defs {
+        name,
+        fov,
+        defs,
+        time_raster,
+    } = convert_defs(
+        &version,
+        extract!(sections, Definitions)
+            .into_iter()
+            .flatten()
+            .collect(),
+    )?;
 
-    let shapes = convert_sec(extract!(sections, Shapes), |shape| {
+    let shapes = convert_sec(SectionType::Shapes, extract!(sections, Shapes), |shape| {
         (shape.id, Arc::new(Shape(shape.samples)))
     })?;
-
-    let delays = convert_sec(extract!(sections, Delays), |delay| (delay.id, delay.delay))?;
-    let adcs = convert_sec(extract!(sections, Adcs), |adc| {
+    let delays = convert_sec(SectionType::Delays, extract!(sections, Delays), |delay| {
+        (delay.id, delay.delay)
+    })?;
+    let adcs = convert_sec(SectionType::Adcs, extract!(sections, Adcs), |adc| {
         (
             adc.id,
             Arc::new(Adc {
@@ -66,7 +75,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
             }),
         )
     })?;
-    let rfs = convert_sec(extract!(sections, Rfs), |rf| {
+    let rfs = convert_sec(SectionType::Rfs, extract!(sections, Rfs), |rf| {
         (
             rf.id,
             Arc::new(Rf {
@@ -80,22 +89,26 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
             }),
         )
     })?;
-    let mut gradients = convert_sec(extract!(sections, Gradients), |grad| {
-        (
-            grad.id,
-            Arc::new(Gradient::Free {
-                amp: grad.amp,
-                shape: shapes[&grad.shape_id].clone(),
-                time: if grad.time_id == 0 {
-                    None
-                } else {
-                    Some(shapes[&grad.time_id].clone())
-                },
-                delay: grad.delay,
-            }),
-        )
-    })?;
-    let traps = convert_sec(extract!(sections, Traps), |trap| {
+    let mut gradients = convert_sec(
+        SectionType::Gradients,
+        extract!(sections, Gradients),
+        |grad| {
+            (
+                grad.id,
+                Arc::new(Gradient::Free {
+                    amp: grad.amp,
+                    shape: shapes[&grad.shape_id].clone(),
+                    time: if grad.time_id == 0 {
+                        None
+                    } else {
+                        Some(shapes[&grad.time_id].clone())
+                    },
+                    delay: grad.delay,
+                }),
+            )
+        },
+    )?;
+    let traps = convert_sec(SectionType::Traps, extract!(sections, Traps), |trap| {
         (
             trap.id,
             Arc::new(Gradient::Trap {
@@ -110,43 +123,41 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ParseError> {
 
     // Gradients and Traps share keys
     let count = gradients.len() + traps.len();
-    gradients.extend(traps.into_iter());
+    gradients.extend(traps);
     if gradients.len() < count {
-        return Err(ParseError::Generic);
+        return Err(ConversionError::GradTrapIdReuse);
     }
 
     let blocks = extract!(sections, Blocks)
         .into_iter()
         .flatten()
         .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
-        .collect::<Result<Vec<Block>, ParseError>>()?;
+        .collect::<Result<Vec<Block>, ConversionError>>()?;
 
     Ok(Sequence {
         name,
         fov,
-        definitions,
+        definitions: defs,
         time_raster,
         blocks,
     })
 }
 
-fn convert_defs(
-    version: &Version,
-    defs: Vec<(String, String)>,
-) -> Result<
-    (
-        Option<String>,
-        Option<(f32, f32, f32)>,
-        HashMap<String, String>,
-        TimeRaster,
-    ),
-    ParseError,
-> {
+/// Simple helper struct to parse definitions into - might be removed after some
+/// more refactoring, but as it's contained in this file this is not urgent.
+struct Defs {
+    name: Option<String>,
+    fov: Option<(f32, f32, f32)>,
+    time_raster: TimeRaster,
+    defs: HashMap<String, String>,
+}
+
+fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, ConversionError> {
     let def_count = defs.len();
     let mut defs: HashMap<_, _> = defs.into_iter().collect();
     if defs.len() < def_count {
         // Duplicated key
-        return Err(ParseError::Generic);
+        return Err(ConversionError::NonUniqueDefinition);
     }
 
     // Before 1.4, there is no spec on what's inside of a definition, so we
@@ -160,31 +171,41 @@ fn convert_defs(
             ..
         }
     ) {
-        return Ok((None, None, defs, TimeRaster::default()));
+        return Ok(Defs {
+            name: None,
+            fov: None,
+            time_raster: TimeRaster::default(),
+            defs,
+        });
     }
 
     let time_raster = TimeRaster {
         grad: defs
             .remove("GradientRasterTime")
-            .ok_or(ParseError::Generic)?
+            .ok_or(MissingDefinition::GradientRasterTime)?
             .parse()?,
         rf: defs
             .remove("RadiofrequencyRasterTime")
-            .ok_or(ParseError::Generic)?
+            .ok_or(MissingDefinition::RadiofrequencyRasterTime)?
             .parse()?,
         adc: defs
             .remove("AdcRasterTime")
-            .ok_or(ParseError::Generic)?
+            .ok_or(MissingDefinition::AdcRasterTime)?
             .parse()?,
         block: defs
             .remove("BlockDurationRaster")
-            .ok_or(ParseError::Generic)?
+            .ok_or(MissingDefinition::BlockDurationRaster)?
             .parse()?,
     };
     let name = defs.remove("Name");
     let fov = defs.remove("FOV").map(parse_fov).transpose()?;
 
-    Ok((name, fov, defs, time_raster))
+    Ok(Defs {
+        name,
+        fov,
+        time_raster,
+        defs,
+    })
 }
 
 fn convert_block(
@@ -194,28 +215,31 @@ fn convert_block(
     adcs: &HashMap<u32, Arc<Adc>>,
     delays: &HashMap<u32, f32>,
     time_raster: &TimeRaster,
-) -> Result<Block, ParseError> {
+) -> Result<Block, ConversionError> {
+    let err = |ty, id| ConversionError::BrokenRef { ty, id };
+    use EventType::*;
+
     let rf = (block.rf != 0)
-        .then(|| rfs.get(&block.rf).cloned().ok_or(ParseError::Generic))
+        .then(|| rfs.get(&block.rf).cloned().ok_or(err(Rf, block.rf)))
         .transpose()?;
     let gx = (block.gx != 0)
-        .then(|| gradients.get(&block.gx).cloned().ok_or(ParseError::Generic))
+        .then(|| gradients.get(&block.gx).cloned().ok_or(err(Gx, block.gx)))
         .transpose()?;
     let gy = (block.gy != 0)
-        .then(|| gradients.get(&block.gy).cloned().ok_or(ParseError::Generic))
+        .then(|| gradients.get(&block.gy).cloned().ok_or(err(Gy, block.gy)))
         .transpose()?;
     let gz = (block.gz != 0)
-        .then(|| gradients.get(&block.gz).cloned().ok_or(ParseError::Generic))
+        .then(|| gradients.get(&block.gz).cloned().ok_or(err(Gz, block.gz)))
         .transpose()?;
     let adc = (block.adc != 0)
-        .then(|| adcs.get(&block.adc).cloned().ok_or(ParseError::Generic))
+        .then(|| adcs.get(&block.adc).cloned().ok_or(err(Adc, block.adc)))
         .transpose()?;
 
     let duration = match block.dur {
         BlockDuration::Duration(dur) => dur as f32 * time_raster.block,
         BlockDuration::DelayId(delay) => {
             let delay = (delay != 0)
-                .then(|| delays.get(&delay).cloned().ok_or(ParseError::Generic))
+                .then(|| delays.get(&delay).cloned().ok_or(err(Delay, delay)))
                 .transpose()?;
 
             [
@@ -244,10 +268,11 @@ fn convert_block(
     })
 }
 
-pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseError> {
+pub fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseFovError> {
     let splits: Vec<_> = s.split_whitespace().collect();
     if splits.len() != 3 {
-        return Err(ParseError::Generic);
+        Err(ParseFovError::WrongValueCount(splits.len()))
+    } else {
+        Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
     }
-    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
 }

@@ -1,11 +1,12 @@
 use ezpc::*;
 use std::str::FromStr;
 
-use crate::error::ParseError;
+use crate::error::ShapeDecompressionError;
 
-// Helper functions
-
-pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>, ParseError> {
+pub fn decompress_shape(
+    samples: Vec<f32>,
+    num_samples: u32,
+) -> Result<Vec<f32>, ShapeDecompressionError> {
     // First, decompress into the deriviate of the shape
     let mut deriv = Vec::with_capacity(num_samples as usize);
 
@@ -15,10 +16,13 @@ pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>,
     // After a detected RLE, skip the RLE check for two samples
     let mut skip = 0;
 
-    for sample in samples {
+    for (index, sample) in samples.into_iter().enumerate() {
         if a == b && skip == 0 {
             if sample != sample.round() {
-                return Err(ParseError::Generic);
+                Err(ShapeDecompressionError::RleCountIsNotInteger {
+                    index,
+                    value: sample,
+                })?;
             }
 
             skip = 2;
@@ -37,7 +41,10 @@ pub fn decompress_shape(samples: Vec<f32>, num_samples: u32) -> Result<Vec<f32>,
     }
 
     if deriv.len() != num_samples as usize {
-        return Err(ParseError::Generic);
+        Err(ShapeDecompressionError::WrongDecompressedCount {
+            count: deriv.len(),
+            expected: num_samples as usize,
+        })?;
     }
 
     // Then, do a cumultative sum to get the shape

@@ -1,4 +1,6 @@
-use crate::error::{self, ParseError};
+use std::fmt::Display;
+
+use crate::error;
 
 mod helpers;
 mod pulseq_1_2;
@@ -20,10 +22,9 @@ mod pulseq_1_4;
 // vPtx: * Rf extended by two shape IDs for mag and phase shim arrays
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
-pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
+pub fn parse_file(source: &str) -> Result<Vec<Section>, error::ParseError> {
     let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
-        .parse_all(source)
-        .map_err(|_| ParseError::Generic)?;
+        .parse_all(source)?;
 
     match version {
         Version {
@@ -35,7 +36,7 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
         Version {
             major: 1, minor: 4, ..
         } => Ok(pulseq_1_4::file().parse_all(source)?),
-        _ => Err(error::Error::UnsupportedVersion(version)),
+        _ => Err(error::ParseError::UnsupportedVersion(version)),
     }
 }
 
@@ -60,6 +61,19 @@ pub struct Version {
     pub minor: u32,
     pub revision: u32,
     pub rev_suppl: Option<String>,
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}.{}.{}{}",
+            self.major,
+            self.minor,
+            self.revision,
+            self.rev_suppl.as_deref().unwrap_or("")
+        )
+    }
 }
 
 #[derive(Debug)]

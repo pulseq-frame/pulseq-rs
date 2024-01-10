@@ -2,7 +2,7 @@
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use crate::{
-    error,
+    error::{self, EventType, ValidationError},
     parse_file::{self, Section},
 };
 
@@ -25,7 +25,7 @@ impl Sequence {
     }
 
     pub fn from_source(source: &str) -> Result<Self, error::Error> {
-        parse_file::parse_file(source).and_then(Self::from_parsed_file)
+        Self::from_parsed_file(parse_file::parse_file(source)?)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, error::Error> {
@@ -33,16 +33,22 @@ impl Sequence {
         Self::from_source(&source)
     }
 
-    pub fn validate(&self) -> Result<(), error::Error> {
+    pub fn validate(&self) -> Result<(), error::ValidationError> {
         // NOTE: We could check if block IDs are in some order or at least not
         // duplicated, but as they are never really used, this might be too strict
 
         // Check if no event is longer than the duration of its block
         for block in &self.blocks {
-            let check = |dur: Option<f32>, err| {
-                dur.map_or(Ok(()), |d| {
-                    if d > block.duration + f32::EPSILON {
-                        Err(err)
+            // Passes through dur if its Some(..) and more than block.duration
+            let check = |dur: Option<f32>, ty: EventType| {
+                dur.map_or(Ok(()), |dur| {
+                    if dur > block.duration + f32::EPSILON {
+                        Err(ValidationError::EventTooLong {
+                            ty,
+                            block_id: block.id,
+                            dur,
+                            block_dur: block.duration,
+                        })
                     } else {
                         Ok(())
                     }
@@ -52,33 +58,32 @@ impl Sequence {
 
             check(
                 block.rf.as_ref().map(|rf| rf.duration(self.time_raster.rf)),
-                error::Error::ParseError(error::ParseError::Generic),
+                EventType::Rf,
             )?;
             check(
                 block.gx.as_ref().map(|gx| gx.duration(grad_raster)),
-                error::Error::ParseError(error::ParseError::Generic),
+                EventType::Gx,
             )?;
             check(
                 block.gy.as_ref().map(|gy| gy.duration(grad_raster)),
-                error::Error::ParseError(error::ParseError::Generic),
+                EventType::Gy,
             )?;
             check(
                 block.gz.as_ref().map(|gz| gz.duration(grad_raster)),
-                error::Error::ParseError(error::ParseError::Generic),
+                EventType::Gz,
             )?;
-            check(
-                block.adc.as_ref().map(|adc| adc.duration()),
-                error::Error::ParseError(error::ParseError::Generic),
-            )?;
+            check(block.adc.as_ref().map(|adc| adc.duration()), EventType::Adc)?;
         }
 
         // Check things like identical shape size and no negative times
         for block in &self.blocks {
-            block.rf.as_ref().map_or(Ok(()), |tmp| tmp.validate())?;
-            block.gx.as_ref().map_or(Ok(()), |tmp| tmp.validate())?;
-            block.gy.as_ref().map_or(Ok(()), |tmp| tmp.validate())?;
-            block.gz.as_ref().map_or(Ok(()), |tmp| tmp.validate())?;
-            block.adc.as_ref().map_or(Ok(()), |tmp| tmp.validate())?;
+            let id = block.id;
+            use EventType::*;
+            block.rf.as_ref().map_or(Ok(()), |x| x.validate(id))?;
+            block.gx.as_ref().map_or(Ok(()), |x| x.validate(Gx, id))?;
+            block.gy.as_ref().map_or(Ok(()), |x| x.validate(Gy, id))?;
+            block.gz.as_ref().map_or(Ok(()), |x| x.validate(Gz, id))?;
+            block.adc.as_ref().map_or(Ok(()), |x| x.validate(id))?;
         }
 
         Ok(())
@@ -180,13 +185,23 @@ impl Rf {
         self.delay + calc_shape_dur(&self.amp_shape, self.time_shape.as_deref(), rf_raster)
     }
 
-    fn validate(&self) -> Result<(), error::Error> {
+    fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
         if self.phase_shape.0.len() != self.amp_shape.0.len() {
-            return Err(error::Error::ParseError(error::ParseError::Generic));
+            Err(ValidationError::ShapeMismatch {
+                ty: EventType::Rf,
+                block_id,
+                length_1: self.phase_shape.0.len(),
+                length_2: self.amp_shape.0.len(),
+            })?;
         }
         if let Some(time_shape) = &self.time_shape {
             if time_shape.0.len() != self.amp_shape.0.len() {
-                return Err(error::Error::ParseError(error::ParseError::Generic));
+                Err(ValidationError::ShapeMismatch {
+                    ty: EventType::Rf,
+                    block_id,
+                    length_1: time_shape.0.len(),
+                    length_2: self.amp_shape.0.len(),
+                })?;
             }
         }
         Ok(())
@@ -209,15 +224,27 @@ impl Gradient {
         }
     }
 
-    fn validate(&self) -> Result<(), error::Error> {
+    fn validate(&self, ty: EventType, block_id: u32) -> Result<(), error::ValidationError> {
         match self {
             Gradient::Free {
                 delay, shape, time, ..
             } => {
+                let time_sample_count = time.as_ref().map_or(shape.0.len(), |t| t.0.len());
                 if *delay < 0.0 {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
-                } else if time.as_ref().map_or(false, |t| shape.0.len() != t.0.len()) {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
+                    Err(ValidationError::NegativeTiming {
+                        ty,
+                        block_id,
+                        timing: *delay,
+                    }
+                    .into())
+                } else if time_sample_count != shape.0.len() {
+                    Err(ValidationError::ShapeMismatch {
+                        ty,
+                        block_id,
+                        length_1: time_sample_count,
+                        length_2: shape.0.len(),
+                    }
+                    .into())
                 } else {
                     Ok(())
                 }
@@ -230,13 +257,33 @@ impl Gradient {
                 ..
             } => {
                 if *rise < 0.0 {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
+                    Err(ValidationError::NegativeTiming {
+                        ty,
+                        block_id,
+                        timing: *rise,
+                    }
+                    .into())
                 } else if *flat < 0.0 {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
+                    Err(ValidationError::NegativeTiming {
+                        ty,
+                        block_id,
+                        timing: *flat,
+                    }
+                    .into())
                 } else if *fall < 0.0 {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
+                    Err(ValidationError::NegativeTiming {
+                        ty,
+                        block_id,
+                        timing: *fall,
+                    }
+                    .into())
                 } else if *delay < 0.0 {
-                    Err(error::Error::ParseError(error::ParseError::Generic))
+                    Err(ValidationError::NegativeTiming {
+                        ty,
+                        block_id,
+                        timing: *delay,
+                    }
+                    .into())
                 } else {
                     Ok(())
                 }
@@ -249,11 +296,22 @@ impl Adc {
     pub fn duration(&self) -> f32 {
         self.delay + self.num as f32 * self.dwell
     }
-    fn validate(&self) -> Result<(), error::Error> {
+
+    fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
         if self.dwell < 0.0 {
-            Err(error::Error::ParseError(error::ParseError::Generic))
+            Err(ValidationError::NegativeTiming {
+                ty: EventType::Adc,
+                block_id,
+                timing: self.dwell,
+            }
+            .into())
         } else if self.delay < 0.0 {
-            Err(error::Error::ParseError(error::ParseError::Generic))
+            Err(ValidationError::NegativeTiming {
+                ty: EventType::Adc,
+                block_id,
+                timing: self.delay,
+            }
+            .into())
         } else {
             Ok(())
         }
