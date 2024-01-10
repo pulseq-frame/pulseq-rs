@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 
-use crate::error::{ParseError, self};
+use crate::error::{self, ParseError};
 
 mod common;
 mod helpers;
+mod pulseq_1_2;
 mod pulseq_1_3;
 mod pulseq_1_4;
 
@@ -29,13 +30,14 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, error::Error> {
 
     match version {
         Version {
+            major: 1, minor: 2, ..
+        } => Ok(pulseq_1_2::file().parse_all(source)?),
+        Version {
             major: 1, minor: 3, ..
-        } => Ok(pulseq_1_3::file()
-            .parse_all(source)?),
+        } => Ok(pulseq_1_3::file().parse_all(source)?),
         Version {
             major: 1, minor: 4, ..
-        } => Ok(pulseq_1_4::file()
-            .parse_all(source)?),
+        } => Ok(pulseq_1_4::file().parse_all(source)?),
         _ => Err(error::Error::UnsupportedVersion(version)),
     }
 }
