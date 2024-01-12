@@ -45,14 +45,14 @@ impl Display for Sequence {
         writeln!(f, "---")?;
         writeln!(
             f,
-            "#  ID       amp {{ ID}}    phase {{ ID}}    delay     freq {{TID}}"
+            "#  ID       amp {{ ID}}    phase {{ ID}}    delay     freq"
         )?;
         writeln!(f, "#                [HZ]          [rad]     [ms]    [kHz]")?;
         rf_refs.fmt(f, &mut shape_refs)?;
 
         writeln!(f, "\n\nGRADIENTS")?;
         writeln!(f, "---------")?;
-        writeln!(f, "#  ID  F    delay      amp {{ ID}} {{TID}}")?;
+        writeln!(f, "#  ID  F    delay      amp {{ ID}}")?;
         writeln!(
             f,
             "#  ID  T    delay      amp (    rise,     flat,     fall)"
@@ -147,14 +147,13 @@ impl RefPrinter<Rf> {
         for (rc, id) in tmp {
             writeln!(
                 f,
-                "[{id:4}] {:8.3} {{{}}} {:8.3} {{{}}} {:8.3} {:8.3} {{{}}}",
+                "[{id:4}] {:8.3} {{{}}} {:8.3} {{{}}} {:8.3} {:8.3}",
                 rc.amp,
                 shape_refs.print(&rc.amp_shape),
                 rc.phase,
                 shape_refs.print(&rc.phase_shape),
                 rc.delay * 1e3,
                 rc.freq / 1e3,
-                shape_refs.print_opt(&rc.time_shape)
             )?;
         }
 
@@ -208,18 +207,12 @@ impl RefPrinter<Gradient> {
         for (rc, id) in tmp {
             write!(f, "[{id:4}] ")?;
             match rc.as_ref() {
-                Gradient::Free {
-                    amp,
-                    shape,
-                    time,
-                    delay,
-                } => writeln!(
+                Gradient::Free { amp, shape, delay } => writeln!(
                     f,
-                    "F {:8.3} {:8.3} {{{}}} {{{}}}",
+                    "F {:8.3} {:8.3} {{{}}}",
                     delay * 1e3,
                     amp / 1e3,
                     shape_refs.print(shape),
-                    shape_refs.print_opt(time),
                 )?,
                 Gradient::Trap {
                     amp,

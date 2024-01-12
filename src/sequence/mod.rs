@@ -140,7 +140,6 @@ pub struct Rf {
     // Shapes
     pub amp_shape: Arc<Shape>,
     pub phase_shape: Arc<Shape>,
-    pub time_shape: Option<Arc<Shape>>,
 }
 
 pub enum Gradient {
@@ -151,7 +150,6 @@ pub enum Gradient {
         delay: f32,
         // Shapes
         shape: Arc<Shape>,
-        time: Option<Arc<Shape>>,
     },
     Trap {
         /// Unit: `[Hz/m]`
@@ -185,7 +183,7 @@ pub struct Shape(pub Vec<f32>);
 
 impl Rf {
     pub fn duration(&self, rf_raster: f32) -> f32 {
-        self.delay + calc_shape_dur(&self.amp_shape, self.time_shape.as_deref(), rf_raster)
+        self.delay + self.amp_shape.0.len() as f32 * rf_raster
     }
 
     fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
@@ -197,16 +195,6 @@ impl Rf {
                 length_2: self.amp_shape.0.len(),
             })?;
         }
-        if let Some(time_shape) = &self.time_shape {
-            if time_shape.0.len() != self.amp_shape.0.len() {
-                Err(ValidationError::ShapeMismatch {
-                    ty: EventType::Rf,
-                    block_id,
-                    length_1: time_shape.0.len(),
-                    length_2: self.amp_shape.0.len(),
-                })?;
-            }
-        }
         Ok(())
     }
 }
@@ -214,9 +202,7 @@ impl Rf {
 impl Gradient {
     pub fn duration(&self, grad_raster: f32) -> f32 {
         match self {
-            Gradient::Free {
-                shape, delay, time, ..
-            } => delay + calc_shape_dur(shape, time.as_deref(), grad_raster),
+            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f32 * grad_raster,
             Gradient::Trap {
                 rise,
                 flat,
@@ -229,23 +215,12 @@ impl Gradient {
 
     fn validate(&self, ty: EventType, block_id: u32) -> Result<(), error::ValidationError> {
         match self {
-            Gradient::Free {
-                delay, shape, time, ..
-            } => {
-                let time_sample_count = time.as_ref().map_or(shape.0.len(), |t| t.0.len());
+            Gradient::Free { delay, shape, .. } => {
                 if *delay < 0.0 {
                     Err(ValidationError::NegativeTiming {
                         ty,
                         block_id,
                         timing: *delay,
-                    }
-                    .into())
-                } else if time_sample_count != shape.0.len() {
-                    Err(ValidationError::ShapeMismatch {
-                        ty,
-                        block_id,
-                        length_1: time_sample_count,
-                        length_2: shape.0.len(),
                     }
                     .into())
                 } else {

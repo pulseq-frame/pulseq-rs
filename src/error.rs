@@ -119,6 +119,8 @@ pub enum MissingDefinition {
     BlockDurationRaster,
 }
 
+// TODO: Include shape IDs into shapes for better error reporting
+
 #[derive(Error, Debug)]
 pub enum ConversionError {
     #[error("Expected a single [VERSION] section, found {0}")]
@@ -137,6 +139,16 @@ pub enum ConversionError {
     ParseFovError(#[from] ParseFovError),
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+    #[error("Shape with index {0} does not exist")]
+    ShapeNotFound(u32),
+    #[error("Can't use 0 as shape index")]
+    ShapeIndexZero,
+    #[error("Used a shape of length {shape_len} together with a time shape of length {time_len}")]
+    TimeShapeMismatch { shape_len: usize, time_len: usize },
+    #[error("Used a shape as time shape which contained non-integer values.")]
+    TimeShapeNonInteger,
+    #[error("Used a shape as time shape which is not strictly increasing")]
+    TimeShapeNonIncreasing,
 }
 
 #[derive(Error, Debug)]
