@@ -213,6 +213,13 @@ impl Gradient {
         }
     }
 
+    pub fn delay(&self) -> f32 {
+        match self {
+            Gradient::Free { delay, .. } => *delay,
+            Gradient::Trap { delay, .. } => *delay,
+        }
+    }
+
     fn validate(&self, ty: EventType, block_id: u32) -> Result<(), error::ValidationError> {
         match self {
             Gradient::Free { delay, shape, .. } => {
