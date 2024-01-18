@@ -219,14 +219,13 @@ impl Gradient {
 
     fn validate(&self, ty: EventType, block_id: u32) -> Result<(), error::ValidationError> {
         match self {
-            Gradient::Free { delay, shape, .. } => {
+            Gradient::Free { delay, .. } => {
                 if *delay < 0.0 {
                     Err(ValidationError::NegativeTiming {
                         ty,
                         block_id,
                         timing: *delay,
-                    }
-                    .into())
+                    })
                 } else {
                     Ok(())
                 }
@@ -243,29 +242,25 @@ impl Gradient {
                         ty,
                         block_id,
                         timing: *rise,
-                    }
-                    .into())
+                    })
                 } else if *flat < 0.0 {
                     Err(ValidationError::NegativeTiming {
                         ty,
                         block_id,
                         timing: *flat,
-                    }
-                    .into())
+                    })
                 } else if *fall < 0.0 {
                     Err(ValidationError::NegativeTiming {
                         ty,
                         block_id,
                         timing: *fall,
-                    }
-                    .into())
+                    })
                 } else if *delay < 0.0 {
                     Err(ValidationError::NegativeTiming {
                         ty,
                         block_id,
                         timing: *delay,
-                    }
-                    .into())
+                    })
                 } else {
                     Ok(())
                 }
@@ -285,25 +280,15 @@ impl Adc {
                 ty: EventType::Adc,
                 block_id,
                 timing: self.dwell,
-            }
-            .into())
+            })
         } else if self.delay < 0.0 {
             Err(ValidationError::NegativeTiming {
                 ty: EventType::Adc,
                 block_id,
                 timing: self.delay,
-            }
-            .into())
+            })
         } else {
             Ok(())
         }
-    }
-}
-
-fn calc_shape_dur(shape: &Shape, time: Option<&Shape>, raster: f32) -> f32 {
-    if let Some(time) = time {
-        time.0.last().cloned().unwrap_or(0.0) * raster
-    } else {
-        shape.0.len() as f32 * raster
     }
 }

@@ -140,7 +140,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         return Err(ConversionError::GradTrapIdReuse);
     }
 
-    let mut blocks = extract!(sections, Blocks)
+    let blocks = extract!(sections, Blocks)
         .into_iter()
         .flatten()
         .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
