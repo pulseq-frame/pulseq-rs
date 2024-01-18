@@ -123,9 +123,6 @@ pub struct Block {
     pub gy: Option<Arc<Gradient>>,
     pub gz: Option<Arc<Gradient>>,
     pub adc: Option<Arc<Adc>>,
-    /// Computed, not part of pulseq: Makes using blocks much easier. Start time
-    /// of this block in the sequence in seconds.
-    pub t_start: f32,
 }
 
 pub struct Rf {

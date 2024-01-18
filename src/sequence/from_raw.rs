@@ -146,13 +146,6 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
         .collect::<Result<Vec<Block>, ConversionError>>()?;
 
-    // Last but not least: fix the block start times
-    let mut t = 0.0;
-    for block in &mut blocks {
-        block.t_start = t;
-        t += block.duration;
-    }
-
     Ok(Sequence {
         name,
         fov,
@@ -284,7 +277,6 @@ fn convert_block(
         gy,
         gz,
         adc,
-        t_start: f32::NAN,
     })
 }
 
