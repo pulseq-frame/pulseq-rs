@@ -60,7 +60,7 @@ pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
             mag_id,
             phase_id,
             time_id: 0,
-            delay: delay as f32 * 1e-6,
+            delay: delay as f64 * 1e-6,
             freq,
             phase,
         },
@@ -77,7 +77,7 @@ pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
             amp,
             shape_id,
             time_id: 0,
-            delay: delay as f32 * 1e-6,
+            delay: delay as f64 * 1e-6,
         });
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
 }
@@ -89,10 +89,10 @@ pub fn traps() -> Parser<impl Parse<Output = Vec<Trap>>> {
         |(((((id, amp), rise), flat), fall), delay)| Trap {
             id,
             amp,
-            rise: rise as f32 * 1e-6,
-            flat: flat as f32 * 1e-6,
-            fall: fall as f32 * 1e-6,
-            delay: delay as f32 * 1e-6,
+            rise: rise as f64 * 1e-6,
+            flat: flat as f64 * 1e-6,
+            fall: fall as f64 * 1e-6,
+            delay: delay as f64 * 1e-6,
         },
     );
     tag_nl("[TRAP]") + (trap + nl()).repeat(1..)
@@ -106,7 +106,7 @@ pub fn adcs() -> Parser<impl Parse<Output = Vec<Adc>>> {
             id,
             num,
             dwell: dwell * 1e-9,
-            delay: delay as f32 * 1e-6,
+            delay: delay as f64 * 1e-6,
             freq,
             phase,
         },
@@ -122,7 +122,7 @@ pub fn delays() -> Parser<impl Parse<Output = Vec<Delay>>> {
     tag_nl("[DELAYS]") + (delay + nl()).repeat(1..)
 }
 
-pub fn raw_shape() -> Parser<impl Parse<Output = (u32, (u32, Vec<f32>))>> {
+pub fn raw_shape() -> Parser<impl Parse<Output = (u32, (u32, Vec<f64>))>> {
     // The spec and the exporter use different tags, we allow both.
     let shape_id = (tag_ws("Shape_ID") | tag_ws("shape_id")) + int() + nl();
     let num_samples = (tag_ws("Num_Uncompressed") | tag_ws("num_samples")) + int() + nl();

@@ -104,42 +104,42 @@ pub struct Block {
 pub struct Rf {
     pub id: u32,
     /// `Hz`
-    pub amp: f32,
+    pub amp: f64,
     pub mag_id: u32,
     pub phase_id: u32,
     pub time_id: u32,
     /// `s` (from pulseq: `us`)
-    pub delay: f32,
+    pub delay: f64,
     /// `Hz`
-    pub freq: f32,
+    pub freq: f64,
     /// `rad`
-    pub phase: f32,
+    pub phase: f64,
 }
 
 #[derive(Debug)]
 pub struct Gradient {
     pub id: u32,
     /// `Hz/m`
-    pub amp: f32,
+    pub amp: f64,
     pub shape_id: u32,
     pub time_id: u32,
     /// `s` (from pulseq: `us`)
-    pub delay: f32,
+    pub delay: f64,
 }
 
 #[derive(Debug)]
 pub struct Trap {
     pub id: u32,
     /// `Hz/m`
-    pub amp: f32,
+    pub amp: f64,
     /// `s` (from pulseq: `us`)
-    pub rise: f32,
+    pub rise: f64,
     /// `s` (from pulseq: `us`)
-    pub flat: f32,
+    pub flat: f64,
     /// `s` (from pulseq: `us`)
-    pub fall: f32,
+    pub fall: f64,
     /// `s` (from pulseq: `us`)
-    pub delay: f32,
+    pub delay: f64,
 }
 
 #[derive(Debug)]
@@ -147,20 +147,20 @@ pub struct Adc {
     pub id: u32,
     pub num: u32,
     /// `s` (from pulseq: `ns`)
-    pub dwell: f32,
+    pub dwell: f64,
     /// `s` (from pulseq: `us`)
-    pub delay: f32,
+    pub delay: f64,
     /// `Hz`
-    pub freq: f32,
+    pub freq: f64,
     /// `rad`
-    pub phase: f32,
+    pub phase: f64,
 }
 
 #[derive(Debug)]
 pub struct Delay {
     pub id: u32,
     /// `s` (from pulseq: `us`)
-    pub delay: f32,
+    pub delay: f64,
 }
 
 #[derive(Debug)]
@@ -193,5 +193,5 @@ pub struct ExtensionObject {
 #[derive(Debug)]
 pub struct Shape {
     pub id: u32,
-    pub samples: Vec<f32>,
+    pub samples: Vec<f64>,
 }

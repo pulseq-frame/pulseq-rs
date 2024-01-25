@@ -54,7 +54,7 @@ pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
             mag_id,
             phase_id,
             time_id,
-            delay: delay as f32 * 1e-6,
+            delay: delay as f64 * 1e-6,
             freq,
             phase,
         },
@@ -71,7 +71,7 @@ pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
             amp,
             shape_id,
             time_id,
-            delay: delay as f32 * 1e-6,
+            delay: delay as f64 * 1e-6,
         },
     );
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)

@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum ShapeDecompressionError {
     #[error("RLE count {value} is not integer at index {index}")]
-    RleCountIsNotInteger { index: usize, value: f32 },
+    RleCountIsNotInteger { index: usize, value: f64 },
     #[error("Shape decompressed into {count} samples, expected {expected}")]
     WrongDecompressedCount { count: usize, expected: usize },
 }
@@ -41,8 +41,8 @@ pub enum ValidationError {
     EventTooLong {
         ty: EventType,
         block_id: u32,
-        dur: f32,
-        block_dur: f32,
+        dur: f64,
+        block_dur: f64,
     },
     #[error("{ty} in block #{block_id} uses shapes with different sample counts: {length_1} vs {length_2}")]
     ShapeMismatch {
@@ -55,7 +55,7 @@ pub enum ValidationError {
     NegativeTiming {
         ty: EventType,
         block_id: u32,
-        timing: f32,
+        timing: f64,
     },
 }
 

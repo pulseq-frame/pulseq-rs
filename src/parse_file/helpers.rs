@@ -4,15 +4,15 @@ use std::str::FromStr;
 use crate::error::ShapeDecompressionError;
 
 pub fn decompress_shape(
-    samples: Vec<f32>,
+    samples: Vec<f64>,
     num_samples: u32,
-) -> Result<Vec<f32>, ShapeDecompressionError> {
+) -> Result<Vec<f64>, ShapeDecompressionError> {
     // First, decompress into the deriviate of the shape
     let mut deriv = Vec::with_capacity(num_samples as usize);
 
     // The two samples before the current one, to detect RLE
-    let mut a = f32::NAN;
-    let mut b = f32::NAN;
+    let mut a = f64::NAN;
+    let mut b = f64::NAN;
     // After a detected RLE, skip the RLE check for two samples
     let mut skip = 0;
 
@@ -93,10 +93,10 @@ pub fn int() -> Parser<impl Parse<Output = u32>> {
         .convert(|s| s.parse(), "Failed to parse string as int")
 }
 
-pub fn float() -> Parser<impl Parse<Output = f32>> {
+pub fn float() -> Parser<impl Parse<Output = f64>> {
     let integer = tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..));
     let frac = tag(".") + one_of("0123456789").repeat(1..);
     let exp = one_of("eE") + one_of("+-").opt() + one_of("0123456789").repeat(1..);
     let number = tag("-").opt() + integer + frac.opt() + exp.opt();
-    number.convert(f32::from_str, "Failed to parse string as float")
+    number.convert(f64::from_str, "Failed to parse string as float")
 }

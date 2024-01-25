@@ -12,7 +12,7 @@ pub mod from_raw;
 pub struct Sequence {
     pub time_raster: TimeRaster,
     pub name: Option<String>,
-    pub fov: Option<(f32, f32, f32)>,
+    pub fov: Option<(f64, f64, f64)>,
     pub definitions: HashMap<String, String>,
     pub blocks: Vec<Block>,
 }
@@ -40,9 +40,9 @@ impl Sequence {
         // Check if no event is longer than the duration of its block
         for block in &self.blocks {
             // Passes through dur if its Some(..) and more than block.duration
-            let check = |dur: Option<f32>, ty: EventType| {
+            let check = |dur: Option<f64>, ty: EventType| {
                 dur.map_or(Ok(()), |dur| {
-                    if dur > block.duration + f32::EPSILON {
+                    if dur > block.duration + f64::EPSILON {
                         Err(ValidationError::EventTooLong {
                             ty,
                             block_id: block.id,
@@ -95,10 +95,10 @@ impl Sequence {
 /// providing the following definitions, filling them with the default
 /// values of the Siemens interpreter if not provided in pre 1.4 sequences.
 pub struct TimeRaster {
-    pub grad: f32,
-    pub rf: f32,
-    pub adc: f32,
-    pub block: f32,
+    pub grad: f64,
+    pub rf: f64,
+    pub adc: f64,
+    pub block: f64,
 }
 
 impl Default for TimeRaster {
@@ -117,7 +117,7 @@ pub struct Block {
     /// as value, because they are not referenced but executed top to bottom.
     /// Its own ID is stored inside of the Block for error reporting.
     pub id: u32,
-    pub duration: f32,
+    pub duration: f64,
     pub rf: Option<Arc<Rf>>,
     pub gx: Option<Arc<Gradient>>,
     pub gy: Option<Arc<Gradient>>,
@@ -127,13 +127,13 @@ pub struct Block {
 
 pub struct Rf {
     /// Unit: `[Hz]`
-    pub amp: f32,
+    pub amp: f64,
     /// Unit: `[rad]`
-    pub phase: f32,
+    pub phase: f64,
     /// Unit: `[s]`
-    pub delay: f32,
+    pub delay: f64,
     /// Unit: `[Hz]`
-    pub freq: f32,
+    pub freq: f64,
     // Shapes
     pub amp_shape: Arc<Shape>,
     pub phase_shape: Arc<Shape>,
@@ -142,45 +142,45 @@ pub struct Rf {
 pub enum Gradient {
     Free {
         /// Unit: `[Hz/m]`
-        amp: f32,
+        amp: f64,
         /// Unit: `[s]`
-        delay: f32,
+        delay: f64,
         // Shapes
         shape: Arc<Shape>,
     },
     Trap {
         /// Unit: `[Hz/m]`
-        amp: f32,
+        amp: f64,
         /// Unit: `[s]`
-        rise: f32,
+        rise: f64,
         /// Unit: `[s]`
-        flat: f32,
+        flat: f64,
         /// Unit: `[s]`
-        fall: f32,
+        fall: f64,
         /// Unit: `[s]`
-        delay: f32,
+        delay: f64,
     },
 }
 
 pub struct Adc {
     pub num: u32,
     /// Unit: `[s]`
-    pub dwell: f32,
+    pub dwell: f64,
     /// Unit: `[s]`
-    pub delay: f32,
+    pub delay: f64,
     /// Unit: `[Hz]`
-    pub freq: f32,
+    pub freq: f64,
     /// Unit: `[rad]`
-    pub phase: f32,
+    pub phase: f64,
 }
 
-pub struct Shape(pub Vec<f32>);
+pub struct Shape(pub Vec<f64>);
 
 // Helper functions and other impls
 
 impl Rf {
-    pub fn duration(&self, rf_raster: f32) -> f32 {
-        self.delay + self.amp_shape.0.len() as f32 * rf_raster
+    pub fn duration(&self, rf_raster: f64) -> f64 {
+        self.delay + self.amp_shape.0.len() as f64 * rf_raster
     }
 
     fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
@@ -197,9 +197,9 @@ impl Rf {
 }
 
 impl Gradient {
-    pub fn duration(&self, grad_raster: f32) -> f32 {
+    pub fn duration(&self, grad_raster: f64) -> f64 {
         match self {
-            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f32 * grad_raster,
+            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f64 * grad_raster,
             Gradient::Trap {
                 rise,
                 flat,
@@ -210,7 +210,7 @@ impl Gradient {
         }
     }
 
-    pub fn delay(&self) -> f32 {
+    pub fn delay(&self) -> f64 {
         match self {
             Gradient::Free { delay, .. } => *delay,
             Gradient::Trap { delay, .. } => *delay,
@@ -270,8 +270,8 @@ impl Gradient {
 }
 
 impl Adc {
-    pub fn duration(&self) -> f32 {
-        self.delay + self.num as f32 * self.dwell
+    pub fn duration(&self) -> f64 {
+        self.delay + self.num as f64 * self.dwell
     }
 
     fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {

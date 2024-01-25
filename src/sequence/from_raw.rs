@@ -159,7 +159,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
 /// more refactoring, but as it's contained in this file this is not urgent.
 struct Defs {
     name: Option<String>,
-    fov: Option<(f32, f32, f32)>,
+    fov: Option<(f64, f64, f64)>,
     time_raster: TimeRaster,
     defs: HashMap<String, String>,
 }
@@ -225,7 +225,7 @@ fn convert_block(
     rfs: &HashMap<u32, Arc<Rf>>,
     gradients: &HashMap<u32, Arc<Gradient>>,
     adcs: &HashMap<u32, Arc<Adc>>,
-    delays: &HashMap<u32, f32>,
+    delays: &HashMap<u32, f64>,
     time_raster: &TimeRaster,
 ) -> Result<Block, ConversionError> {
     let err = |ty, id| ConversionError::BrokenRef { ty, id };
@@ -248,7 +248,7 @@ fn convert_block(
         .transpose()?;
 
     let duration = match block.dur {
-        BlockDuration::Duration(dur) => dur as f32 * time_raster.block,
+        BlockDuration::Duration(dur) => dur as f64 * time_raster.block,
         BlockDuration::DelayId(delay) => {
             let delay = (delay != 0)
                 .then(|| delays.get(&delay).cloned().ok_or(err(Delay, delay)))
@@ -280,7 +280,7 @@ fn convert_block(
     })
 }
 
-fn parse_fov(s: String) -> Result<(f32, f32, f32), ParseFovError> {
+fn parse_fov(s: String) -> Result<(f64, f64, f64), ParseFovError> {
     let splits: Vec<_> = s.split_whitespace().collect();
     if splits.len() != 3 {
         Err(ParseFovError::WrongValueCount(splits.len()))
@@ -380,7 +380,7 @@ fn expand_shape(shape: &Arc<Shape>, time: &Arc<Shape>) -> Result<Shape, Conversi
         // Interpolate between amp and next_amp in line_len steps
         let line_len = len - expanded.len() as u32;
         for t in 0..line_len {
-            let t = (t as f32 + 0.5) / line_len as f32;
+            let t = (t as f64 + 0.5) / line_len as f64;
             expanded.push(amp + t * (next_amp - amp));
         }
         amp = next_amp;
