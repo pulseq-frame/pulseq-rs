@@ -41,7 +41,7 @@ pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
         adc: tags[5],
         ext: tags[6],
     });
-    tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
+    tag_nl("[BLOCKS]") + (block + nl()).repeat(0..)
 }
 
 pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
@@ -59,7 +59,7 @@ pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
             phase,
         },
     );
-    tag_nl("[RF]") + (rf + nl()).repeat(1..)
+    tag_nl("[RF]") + (rf + nl()).repeat(0..)
 }
 
 pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
@@ -74,7 +74,7 @@ pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
             delay: delay as f64 * 1e-6,
         },
     );
-    tag_nl("[GRADIENTS]") + (grad + nl()).repeat(1..)
+    tag_nl("[GRADIENTS]") + (grad + nl()).repeat(0..)
 }
 
 pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
@@ -88,5 +88,5 @@ pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
         },
         "Failed to decompress shape",
     );
-    tag_nl("[SHAPES]") + shape.repeat(1..)
+    tag_nl("[SHAPES]") + shape.repeat(0..)
 }

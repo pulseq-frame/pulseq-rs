@@ -29,11 +29,10 @@ fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
         adc: tags[5],
         ext: tags[6],
     });
-    tag_nl("[BLOCKS]") + (block + nl()).repeat(1..)
+    tag_nl("[BLOCKS]") + (block + nl()).repeat(0..)
 }
 
 pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {
-    let rest_of_line = none_of("\n").repeat(1..).map(|s| s.trim().to_owned());
     let i = || ws() + int();
     let ext_ref =
         (ws().opt() + int() + i() + i() + i() + nl()).map(|(((id, spec_id), obj_id), next)| {
@@ -44,6 +43,7 @@ pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {
                 next,
             }
         });
+    let rest_of_line = none_of("\n").repeat(1..).map(|s| s.trim().to_owned());
     let ext_obj =
         (ws().opt() + int() + rest_of_line + nl()).map(|(id, data)| ExtensionObject { id, data });
     let ext_spec = (tag_ws("extension") + ident() + ws() + int() + nl() + ext_obj.repeat(1..)).map(
@@ -53,6 +53,6 @@ pub fn extensions() -> Parser<impl Parse<Output = Extensions>> {
             instances,
         },
     );
-    (tag_nl("[EXTENSIONS]") + ext_ref.repeat(1..) + ext_spec.repeat(1..))
+    (tag_nl("[EXTENSIONS]") + ext_ref.repeat(0..) + ext_spec.repeat(0..))
         .map(|(refs, specs)| Extensions { refs, specs })
 }
