@@ -83,7 +83,7 @@ pub fn tag_nl(tag_str: &'static str) -> Matcher<impl Match> {
 }
 
 pub fn ident() -> Parser<impl Parse<Output = String>> {
-    is_a(char::is_alphanumeric)
+    is_a(|c| c.is_alphanumeric() | c.is_ascii_graphic())
         .repeat(1..)
         .map(|s| s.to_owned())
 }
