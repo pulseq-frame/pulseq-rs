@@ -1,6 +1,6 @@
 use ezpc::*;
 
-use super::pulseq_1_2::{adcs, definitions, raw_shape, traps, version};
+use super::pulseq_1_2::{adcs, definitions, shapes, traps, version};
 use super::pulseq_1_3::extensions;
 use super::{helpers::*, *};
 
@@ -47,18 +47,20 @@ pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
 pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     let i = || ws() + int();
     let f = || ws() + float();
-    let rf = (ws().opt() + int() + f() + i() + i() + i() + i() + f() + f()).map(
-        |(((((((id, amp), mag_id), phase_id), time_id), delay), freq), phase)| Rf {
-            id,
-            amp,
-            mag_id,
-            phase_id,
-            time_id,
-            delay: delay as f64 * 1e-6,
-            freq,
-            phase,
-        },
-    );
+    let rf = (ws().opt() + int() + f() + i() + i() + i() + i() + f() + f() + (i() + i()).opt())
+        .map(
+            |((((((((id, amp), mag_id), phase_id), time_id), delay), freq), phase), shim_id)| Rf {
+                id,
+                amp,
+                mag_id,
+                phase_id,
+                time_id,
+                delay: delay as f64 * 1e-6,
+                freq,
+                phase,
+                shim_id,
+            },
+        );
     tag_nl("[RF]") + (rf + nl()).repeat(0..)
 }
 
@@ -75,18 +77,4 @@ pub fn gradients() -> Parser<impl Parse<Output = Vec<Gradient>>> {
         },
     );
     tag_nl("[GRADIENTS]") + (grad + nl()).repeat(0..)
-}
-
-pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
-    let shape = raw_shape().convert(
-        |(id, (num_samples, samples))| {
-            if samples.len() == num_samples as usize {
-                Ok(Shape { id, samples })
-            } else {
-                decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
-            }
-        },
-        "Failed to decompress shape",
-    );
-    tag_nl("[SHAPES]") + shape.repeat(0..)
 }

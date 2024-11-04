@@ -53,8 +53,8 @@ pub fn blocks() -> Parser<impl Parse<Output = Vec<Block>>> {
 pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     let i = || ws() + int();
     let f = || ws() + float();
-    let rf = (ws().opt() + int() + f() + i() + i() + i() + f() + f()).map(
-        |((((((id, amp), mag_id), phase_id), delay), freq), phase)| Rf {
+    let rf = (ws().opt() + int() + f() + i() + i() + i() + f() + f() + (i() + i()).opt()).map(
+        |(((((((id, amp), mag_id), phase_id), delay), freq), phase), shim_id)| Rf {
             id,
             amp,
             mag_id,
@@ -63,6 +63,7 @@ pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
             delay: delay as f64 * 1e-6,
             freq,
             phase,
+            shim_id,
         },
     );
     tag_nl("[RF]") + (rf + nl()).repeat(0..)
@@ -131,9 +132,15 @@ pub fn raw_shape() -> Parser<impl Parse<Output = (u32, (u32, Vec<f64>))>> {
 }
 
 pub fn shapes() -> Parser<impl Parse<Output = Vec<Shape>>> {
+    // The spec says optional RLE only since version 1.4 but seems to be used earlier.
+    // We allow it in all versions unless there is a bug report for failing decompression.
     let shape = raw_shape().convert(
         |(id, (num_samples, samples))| {
-            decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
+            if samples.len() == num_samples as usize {
+                Ok(Shape { id, samples })
+            } else {
+                decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
+            }
         },
         "Failed to decompress shape",
     );

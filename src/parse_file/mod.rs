@@ -19,7 +19,8 @@ mod pulseq_1_4;
 //       * Rf and Gradient now have an optional time_id for time shapes
 //       * Also added mandatory definitions. Spec defines FOV units to be meters
 //       * Shapes can be compressed
-// vPtx: * Rf extended by two shape IDs for mag and phase shim arrays
+// vPtx: * Rf extended by two shape IDs for mag and phase shim arrays.
+//         This is allowed in all pulseq versions.
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
 pub fn parse_file(source: &str) -> Result<Vec<Section>, error::ParseError> {
@@ -114,6 +115,8 @@ pub struct Rf {
     pub freq: f64,
     /// `rad`
     pub phase: f64,
+    /// shim_mag_ID, shim_phase_ID
+    pub shim_id: Option<(u32, u32)>,
 }
 
 #[derive(Debug)]

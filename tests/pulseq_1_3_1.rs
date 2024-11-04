@@ -32,3 +32,8 @@ fn tse() {
 fn ute() {
     Sequence::from_file("../test-seqs/pypulseq/1.3.1.post1/ute.seq").unwrap();
 }
+#[test]
+fn rfshim() {
+    Sequence::from_file("../test-seqs/pypulseq_rf_shim/B1map_presat_4adc_pythonby_rfshim.seq")
+        .unwrap();
+}

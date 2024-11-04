@@ -137,6 +137,8 @@ pub struct Rf {
     // Shapes
     pub amp_shape: Arc<Shape>,
     pub phase_shape: Arc<Shape>,
+    // pTx extension
+    pub shim_shape: Option<(Arc<Shape>, Arc<Shape>)>,
 }
 
 pub enum Gradient {

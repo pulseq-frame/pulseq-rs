@@ -92,11 +92,14 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 phase: rf.phase,
                 amp_shape: shape_lib.get(rf.mag_id, rf.time_id)?,
                 phase_shape: shape_lib.get(rf.phase_id, rf.time_id)?,
-                // amp_shape: shapes[&rf.mag_id].clone(),
-                // phase_shape: shapes[&rf.phase_id].clone(),
-                // time_shape: (rf.time_id != 0).then(|| shapes[&rf.time_id].clone()),
                 delay: rf.delay,
                 freq: rf.freq,
+                shim_shape: match rf.shim_id {
+                    Some((mag_id, phase_id)) => {
+                        Some((shape_lib.get(mag_id, 0)?, shape_lib.get(phase_id, 0)?))
+                    }
+                    None => None,
+                },
             }),
         ))
     })?;
@@ -109,12 +112,6 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 Arc::new(Gradient::Free {
                     amp: grad.amp,
                     shape: shape_lib.get(grad.shape_id, grad.time_id)?,
-                    // shape: shapes[&grad.shape_id].clone(),
-                    // time: if grad.time_id == 0 {
-                    //     None
-                    // } else {
-                    //     Some(shapes[&grad.time_id].clone())
-                    // },
                     delay: grad.delay,
                 }),
             ))
