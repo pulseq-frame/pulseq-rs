@@ -54,16 +54,23 @@ pub fn rfs() -> Parser<impl Parse<Output = Vec<Rf>>> {
     let i = || ws() + int();
     let f = || ws() + float();
     let rf = (ws().opt() + int() + f() + i() + i() + i() + f() + f() + (i() + i()).opt()).map(
-        |(((((((id, amp), mag_id), phase_id), delay), freq), phase), shim_id)| Rf {
-            id,
-            amp,
-            mag_id,
-            phase_id,
-            time_id: 0,
-            delay: delay as f64 * 1e-6,
-            freq,
-            phase,
-            shim_id,
+        |(((((((id, amp), mag_id), phase_id), delay), freq), phase), shim_id_raw)| {
+            // Shim indices of 0, 0 are treated as no shim - 0 is an invalid shape_id
+            let shim_id = match shim_id_raw {
+                Some((0, 0)) => None,
+                _ => shim_id_raw,
+            };
+            Rf {
+                id,
+                amp,
+                mag_id,
+                phase_id,
+                time_id: 0,
+                delay: delay as f64 * 1e-6,
+                freq,
+                phase,
+                shim_id,
+            }
         },
     );
     tag_nl("[RF]") + (rf + nl()).repeat(0..)
