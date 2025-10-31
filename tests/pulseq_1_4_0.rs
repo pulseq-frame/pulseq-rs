@@ -1,6 +1,11 @@
 use pulseq_rs::Sequence;
 
 #[test]
+/// A 1.4 + pTx extension file that uses shape ID 0 for the shim (default shim)
+fn ptx_noshim() {
+    Sequence::from_file("assets/grappa_acs.seq").unwrap();
+}
+#[test]
 fn epi_label() {
     Sequence::from_file("../test-seqs/pypulseq/1.4.0/epi_label.seq").unwrap();
 }
