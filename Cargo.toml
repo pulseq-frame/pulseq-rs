@@ -6,5 +6,5 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ezpc = { git = "https://github.com/pulseq-frame/ezpc.git" }
-thiserror = "1.0.51"
+thiserror = "2.0.18"
+winnow = "1.0.2"

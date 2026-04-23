@@ -1,5 +1,7 @@
-use ezpc::*;
-use std::str::FromStr;
+use winnow::ascii::{line_ending, till_line_ending};
+use winnow::combinator::{alt, eof, repeat};
+use winnow::prelude::*;
+use winnow::token::take_while;
 
 use crate::error::ShapeDecompressionError;
 
@@ -60,43 +62,45 @@ pub fn decompress_shape(
 // Simple parsers that are not really specific to pulseq
 
 /// Matches at least one whitespace but now newline
-pub fn ws() -> Matcher<impl Match> {
-    one_of(" \t").repeat(1..)
+pub fn ws(input: &mut &str) -> ModalResult<()> {
+    take_while(1.., (' ', '\t')).void().parse_next(input)
 }
 
 /// Matches as many whitespaces and comments as possible but expects at least one '\n'
-pub fn nl() -> Matcher<impl Match> {
-    let ignore = || ws() | (tag("#") + none_of("\n").repeat(0..));
-    let eol = || tag("\r\n") | tag("\n");
-
-    eof() | ((ignore().opt() + eol()).repeat(1..) + ignore().opt())
+pub fn nl(input: &mut &str) -> ModalResult<()> {
+    // matches comments or empty lines, stops at line ending
+    let comment = alt((ws, ('#', till_line_ending)));
+    // consume the line ending here not in comment to support ending in comment
+    alt((
+        eof,
+        (repeat(1.., (opt(comment), line_ending)), opt(comment)),
+    ))
+    .void()
+    .parse_next(input)
 }
 
 /// Shorthand for tag + whitespace
-pub fn tag_ws(tag_str: &'static str) -> Matcher<impl Match> {
-    tag(tag_str) + ws()
+pub fn tag_ws(tag_str: &'static str) -> impl FnMut(&mut &str) -> ModalResult<()> {
+    move |input: &mut &str| (tag_str, ws).void().parse_next(input)
 }
 
 /// Shorthand for tag + newline
-pub fn tag_nl(tag_str: &'static str) -> Matcher<impl Match> {
-    tag(tag_str) + nl()
+pub fn tag_nl(tag_str: &'static str) -> impl FnMut(&mut &str) -> ModalResult<()> {
+    move |input: &mut &str| (tag_str, nl).void().parse_next(input)
 }
 
-pub fn ident() -> Parser<impl Parse<Output = String>> {
-    is_a(|c| c.is_ascii_graphic())
-        .repeat(1..)
-        .map(|s| s.to_owned())
+pub fn ident(input: &mut &str) -> ModalResult<String> {
+    take_while(1.., char::is_ascii_graphic)
+        .map(str::to_owned)
+        .parse_next(input)
 }
 
-pub fn int() -> Parser<impl Parse<Output = u32>> {
-    (tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..)))
-        .convert(|s| s.parse(), "Failed to parse string as int")
+#[deprecated(note = "use winnow::ascii::dec_uint(input) directly")]
+pub fn int(input: &mut &str) -> ModalResult<u32> {
+    winnow::ascii::dec_uint(input)
 }
 
-pub fn float() -> Parser<impl Parse<Output = f64>> {
-    let integer = tag("0") | (one_of("123456789") + one_of("0123456789").repeat(0..));
-    let frac = tag(".") + one_of("0123456789").repeat(1..);
-    let exp = one_of("eE") + one_of("+-").opt() + one_of("0123456789").repeat(1..);
-    let number = tag("-").opt() + integer + frac.opt() + exp.opt();
-    number.convert(f64::from_str, "Failed to parse string as float")
+#[deprecated(note = "use winnow::ascii::float(input) directly")]
+pub fn float(input: &mut &str) -> ModalResult<f64> {
+    winnow::ascii::float(input)
 }
