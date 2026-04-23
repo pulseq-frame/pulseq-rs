@@ -1,5 +1,5 @@
 use winnow::ascii::{line_ending, till_line_ending};
-use winnow::combinator::{alt, eof, repeat};
+use winnow::combinator::{alt, eof, opt, repeat};
 use winnow::prelude::*;
 use winnow::token::take_while;
 
@@ -69,13 +69,16 @@ pub fn ws(input: &mut &str) -> ModalResult<()> {
 /// Matches as many whitespaces and comments as possible but expects at least one '\n'
 pub fn nl(input: &mut &str) -> ModalResult<()> {
     // matches comments or empty lines, stops at line ending
-    let comment = alt((ws, ('#', till_line_ending)));
+    let comment = || alt((ws, ('#', till_line_ending).void()));
     // consume the line ending here not in comment to support ending in comment
     alt((
-        eof,
-        (repeat(1.., (opt(comment), line_ending)), opt(comment)),
+        eof.void(),
+        (
+            repeat::<_, _, (), _, _>(1.., (opt(comment()), line_ending)),
+            opt(comment()),
+        )
+            .void(),
     ))
-    .void()
     .parse_next(input)
 }
 
@@ -90,7 +93,7 @@ pub fn tag_nl(tag_str: &'static str) -> impl FnMut(&mut &str) -> ModalResult<()>
 }
 
 pub fn ident(input: &mut &str) -> ModalResult<String> {
-    take_while(1.., char::is_ascii_graphic)
+    take_while(1.., |c: char| c.is_ascii_graphic())
         .map(str::to_owned)
         .parse_next(input)
 }

@@ -24,19 +24,25 @@ mod pulseq_1_4;
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
 pub fn parse_file(source: &str) -> Result<Vec<Section>, error::ParseError> {
-    let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
-        .parse_all(source)?;
+    // parse file twice, first time to only see version, second time below for full parse
+    use winnow::combinator::{opt, preceded};
+    use winnow::prelude::*;
+    let mut tmp = source;
+    let version = preceded(opt(helpers::nl), pulseq_1_2::version).parse_next(&mut tmp)?;
+
+    // let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
+    //     .parse_all(source)?;
 
     match version {
         Version {
             major: 1, minor: 2, ..
-        } => Ok(pulseq_1_2::file().parse_all(source)?),
+        } => Ok(pulseq_1_2::file.parse(source)?),
         Version {
             major: 1, minor: 3, ..
-        } => Ok(pulseq_1_3::file().parse_all(source)?),
+        } => Ok(pulseq_1_3::file.parse(source)?),
         Version {
             major: 1, minor: 4, ..
-        } => Ok(pulseq_1_4::file().parse_all(source)?),
+        } => Ok(pulseq_1_4::file.parse(source)?),
         _ => Err(error::ParseError::UnsupportedVersion(version)),
     }
 }

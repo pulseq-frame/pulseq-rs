@@ -62,13 +62,25 @@ pub enum ValidationError {
 #[derive(Error, Debug)]
 pub enum ParseError {
     #[error("Syntax error in pulseq file: {0}")]
-    EzpcError(#[from] ezpc::EzpcError),
+    SyntaxError(String),
     #[error("Failed to parse float: {0}")]
     ParseFloat(#[from] std::num::ParseFloatError),
     #[error("Unsupported pulseq file version: {0}")]
     UnsupportedVersion(Version),
     #[error("Failed to decompress shape: {0}")]
     ShapeDecompressionError(#[from] ShapeDecompressionError),
+}
+
+impl<'s> From<winnow::error::ParseError<&'s str, winnow::error::ContextError>> for ParseError {
+    fn from(e: winnow::error::ParseError<&'s str, winnow::error::ContextError>) -> Self {
+        ParseError::SyntaxError(e.to_string())
+    }
+}
+
+impl From<winnow::error::ErrMode<winnow::error::ContextError>> for ParseError {
+    fn from(e: winnow::error::ErrMode<winnow::error::ContextError>) -> Self {
+        ParseError::SyntaxError(e.to_string())
+    }
 }
 
 #[derive(Debug)]
