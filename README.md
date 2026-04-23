@@ -5,6 +5,10 @@ In the future, functions for building sequences might be added.
 
 # Changelog
 
+### 0.1.3
+- Treat rfshim entries with `shape_id = 0` as "no shim" (applies to both v1.2 and v1.4 files)
+- Allow all graphic ASCII symbols in identifiers
+
 ### 0.1.2
 - Added support for the rfshim pTx extension by loading magnitude and phase shim arrays if found, regardless of file format.
 
