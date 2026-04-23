@@ -1,6 +1,6 @@
 use winnow::{
     ascii::till_line_ending,
-    combinator::{alt, delimited, empty, opt, preceded, repeat, seq},
+    combinator::{alt, delimited, empty, opt, preceded, repeat, seq, terminated},
     prelude::*,
 };
 
@@ -56,14 +56,13 @@ pub fn definitions(input: &mut &str) -> ModalResult<Vec<(String, String)>> {
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
     // TODO: maybe integrate ws into other parsers like int?
     let block = seq! { Block {
-        _: opt(ws),
         id: int,
-        dur: preceded(ws, int).map(BlockDuration::DelayId),
-        rf: preceded(ws, int),
-        gx: preceded(ws, int),
-        gy: preceded(ws, int),
-        gz: preceded(ws, int),
-        adc: preceded(ws, int),
+        dur: int.map(BlockDuration::DelayId),
+        rf: int,
+        gx: int,
+        gy: int,
+        gz: int,
+        adc: int,
         ext: empty.value(0),
         _: nl,
     }};
@@ -72,17 +71,16 @@ pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
 
 pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
     let rf = seq! {Rf {
-        _: opt(ws),
         id: int,
-        amp: preceded(ws, float),
-        mag_id: preceded(ws, int),
-        phase_id: preceded(ws, int),
+        amp: float,
+        mag_id: int,
+        phase_id: int,
         time_id: empty.value(0),
-        delay: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
-        freq: preceded(ws, float),
-        phase: preceded(ws, float),
+        delay: int.map(|d: u32| d as f64 * 1e-6),
+        freq: float,
+        phase: float,
         // Shim indices of 0, 0 are treated as no shim - 0 is an invalid shape_id
-        shim_id: opt((preceded(ws, int), preceded(ws, int))).map(|s| match s {
+        shim_id: opt((int, int)).map(|s| match s {
             Some((0, 0)) => None,
             _ => s,
         }),
@@ -94,12 +92,11 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
 pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
     let grad = || {
         seq! {Gradient {
-            _: opt(ws),
             id: int,
-            amp: preceded(ws, float),
-            shape_id: preceded(ws, int),
+            amp: float,
+            shape_id: int,
             time_id: empty.value(0),
-            delay: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
+            delay: int.map(|d: u32| d as f64 * 1e-6),
             _: nl,
         }}
     };
@@ -108,13 +105,12 @@ pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
 
 pub fn traps(input: &mut &str) -> ModalResult<Vec<Trap>> {
     let trap = seq! {Trap {
-        _: opt(ws),
         id: int,
-        amp: preceded(ws, float),
-        rise: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
-        flat: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
-        fall: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
-        delay: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
+        amp: float,
+        rise: int.map(|d: u32| d as f64 * 1e-6),
+        flat: int.map(|d: u32| d as f64 * 1e-6),
+        fall: int.map(|d: u32| d as f64 * 1e-6),
+        delay: int.map(|d: u32| d as f64 * 1e-6),
         _: nl,
     }};
     preceded(tag_nl("[TRAP]"), repeat(0.., trap)).parse_next(input)
@@ -122,13 +118,12 @@ pub fn traps(input: &mut &str) -> ModalResult<Vec<Trap>> {
 
 pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
     let adc = seq! {Adc {
-        _: opt(ws),
         id: int,
-        num: preceded(ws, int),
-        dwell: preceded(ws, float).map(|d: f64| d * 1e-9),
-        delay: preceded(ws, int).map(|d: u32| d as f64 * 1e-6),
-        freq: preceded(ws, float),
-        phase: preceded(ws, float),
+        num: int,
+        dwell: float.map(|d: f64| d * 1e-9),
+        delay: int.map(|d: u32| d as f64 * 1e-6),
+        freq: float,
+        phase: float,
         _: nl,
     }};
     preceded(tag_nl("[ADC]"), repeat(0.., adc)).parse_next(input)
@@ -136,9 +131,8 @@ pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
 
 pub fn delays(input: &mut &str) -> ModalResult<Vec<Delay>> {
     let delay = seq! {Delay {
-        _: opt(ws),
         id: int,
-        delay: preceded(ws, float).map(|d: f64| d * 1e-6),
+        delay: float.map(|d: f64| d * 1e-6),
         _: nl,
     }};
     preceded(tag_nl("[DELAYS]"), repeat(0.., delay)).parse_next(input)
@@ -154,7 +148,7 @@ pub fn raw_shape(input: &mut &str) -> ModalResult<(u32, (u32, Vec<f64>))> {
             nl,
         )
     };
-    let samples = || repeat(0.., delimited(opt(ws), float, nl));
+    let samples = || repeat(0.., terminated(float, nl));
 
     seq!((shape_id(), (num_samples(), samples()))).parse_next(input)
 }

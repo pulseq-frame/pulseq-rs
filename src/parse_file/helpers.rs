@@ -1,5 +1,5 @@
 use winnow::ascii::{line_ending, till_line_ending};
-use winnow::combinator::{alt, eof, opt, repeat};
+use winnow::combinator::{alt, eof, opt, preceded, repeat};
 use winnow::prelude::*;
 use winnow::token::take_while;
 
@@ -98,12 +98,12 @@ pub fn ident(input: &mut &str) -> ModalResult<String> {
         .parse_next(input)
 }
 
-#[deprecated(note = "use winnow::ascii::dec_uint(input) directly")]
+/// (opt(ws), int)
 pub fn int(input: &mut &str) -> ModalResult<u32> {
-    winnow::ascii::dec_uint(input)
+    preceded(opt(ws), winnow::ascii::dec_uint).parse_next(input)
 }
 
-#[deprecated(note = "use winnow::ascii::float(input) directly")]
+/// (opt(ws), float)
 pub fn float(input: &mut &str) -> ModalResult<f64> {
-    winnow::ascii::float(input)
+    preceded(opt(ws), winnow::ascii::float).parse_next(input)
 }

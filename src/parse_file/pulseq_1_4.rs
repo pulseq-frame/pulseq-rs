@@ -52,36 +52,31 @@ pub fn signature(input: &mut &str) -> ModalResult<Signature> {
 
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
     let block = seq! { Block {
-        _: opt(ws),
         id: int,
-        dur: preceded(ws, int).map(BlockDuration::Duration),
-        rf: preceded(ws, int),
-        gx: preceded(ws, int),
-        gy: preceded(ws, int),
-        gz: preceded(ws, int),
-        adc: preceded(ws, int),
-        ext: preceded(ws, int),
+        dur: int.map(BlockDuration::Duration),
+        rf: int,
+        gx: int,
+        gy: int,
+        gz: int,
+        adc: int,
+        ext: int,
         _: nl,
     }};
     preceded(tag_nl("[BLOCKS]"), repeat(0.., block)).parse_next(input)
 }
 
 pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
-    let i = || preceded(ws, int);
-    let f = || preceded(ws, float);
-
     let rf = seq! {Rf {
-        _: opt(ws),
         id: int,
-        amp: f(),
-        mag_id: i(),
-        phase_id: i(),
-        time_id: i(),
-        delay: i().map(|d: u32| d as f64 * 1e-6),
-        freq: f(),
-        phase: f(),
+        amp: float,
+        mag_id: int,
+        phase_id: int,
+        time_id: int,
+        delay: int.map(|d: u32| d as f64 * 1e-6),
+        freq: float,
+        phase: float,
         // Shim indices of 0, 0 are treated as no shim - 0 is an invalid shape_id
-        shim_id: opt((i(), i())).map(|s| match s {
+        shim_id: opt((int, int)).map(|s| match s {
             Some((0, 0)) => None,
             _ => s,
         }),
@@ -91,16 +86,12 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
 }
 
 pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
-    let i = || preceded(ws, int);
-    let f = || preceded(ws, float);
-
     let grad = seq! {Gradient {
-        _: opt(ws),
         id: int,
-        amp: f(),
-        shape_id: i(),
-        time_id: i(),
-        delay: i().map(|d: u32| d as f64 * 1e-6),
+        amp: float,
+        shape_id: int,
+        time_id: int,
+        delay: int.map(|d: u32| d as f64 * 1e-6),
         _: nl,
     }};
     preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad)).parse_next(input)

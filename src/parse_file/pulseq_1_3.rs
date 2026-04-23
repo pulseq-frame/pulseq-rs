@@ -31,15 +31,14 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
 
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
     let block = seq! { Block {
-        _: opt(ws),
         id: int,
-        dur: preceded(ws, int).map(BlockDuration::DelayId),
-        rf: preceded(ws, int),
-        gx: preceded(ws, int),
-        gy: preceded(ws, int),
-        gz: preceded(ws, int),
-        adc: preceded(ws, int),
-        ext: preceded(ws, int),
+        dur: int.map(BlockDuration::DelayId),
+        rf: int,
+        gx: int,
+        gy: int,
+        gz: int,
+        adc: int,
+        ext: int,
         _: nl,
     }};
     preceded(tag_nl("[BLOCKS]"), repeat(0.., block)).parse_next(input)
@@ -57,17 +56,15 @@ pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
 
     let ext_ref = || {
         seq! { ExtensionRef {
-            _: opt(ws),
             id: int,
-            spec_id: preceded(ws, int),
-            obj_id: preceded(ws, int),
-            next: preceded(ws, int),
+            spec_id: int,
+            obj_id: int,
+            next: int,
             _: nl,
         }}
     };
     let ext_obj = || {
         seq! { ExtensionObject {
-            _: opt(ws),
             id: int,
             data: till_line_ending.map(|s: &str| s.trim().to_owned()),
             _: nl,
@@ -77,7 +74,7 @@ pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
         seq! { ExtensionSpec {
             _: tag_ws("extension"),
             name: ident,
-            id: preceded(ws, int),
+            id: int,
             _: nl,
             instances: repeat(1.., ext_obj())
         }}
