@@ -1,6 +1,7 @@
 use winnow::{
     ascii::till_line_ending,
-    combinator::{alt, delimited, empty, opt, preceded, repeat, seq, terminated},
+    combinator::{alt, cut_err, delimited, empty, opt, preceded, repeat, seq, terminated},
+    error::StrContext,
     prelude::*,
 };
 
@@ -28,18 +29,15 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
 }
 
 pub fn version(input: &mut &str) -> ModalResult<Version> {
-    let major = delimited(tag_ws("major"), int, nl);
-    let minor = delimited(tag_ws("minor"), int, nl);
-    let revision = delimited(tag_ws("revision"), (int, opt(ident)), nl);
-
-    (tag_nl("[VERSION]"), major, minor, revision)
-        .map(|(_, major, minor, (revision, rev_suppl))| Version {
-            major,
-            minor,
-            revision,
-            rev_suppl,
-        })
-        .parse_next(input)
+    seq! { Version {
+        _: tag_nl("[VERSION]"),
+        major: cut_err(delimited(tag_ws("major"), int, nl)),
+        minor: cut_err(delimited(tag_ws("minor"), int, nl)),
+        revision: cut_err(preceded(tag_ws("revision"), int)),
+        rev_suppl: cut_err(terminated(opt(ident), nl))
+    }}
+    .context(StrContext::Label("[VERSION] section"))
+    .parse_next(input)
 }
 
 pub fn definitions(input: &mut &str) -> ModalResult<Vec<(String, String)>> {
@@ -50,92 +48,117 @@ pub fn definitions(input: &mut &str) -> ModalResult<Vec<(String, String)>> {
         nl,
     )
         .map(|(key, _, value, _)| (key, value));
-    preceded(tag_nl("[DEFINITIONS]"), repeat(0.., def)).parse_next(input)
+
+    preceded(tag_nl("[DEFINITIONS]"), repeat(0.., def))
+        .context(StrContext::Label("[DEFINITIONS] section"))
+        .parse_next(input)
 }
 
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
-    // TODO: maybe integrate ws into other parsers like int?
     let block = seq! { Block {
         id: int,
-        dur: int.map(BlockDuration::DelayId),
-        rf: int,
-        gx: int,
-        gy: int,
-        gz: int,
-        adc: int,
+        dur: cut_err(int).map(BlockDuration::DelayId),
+        rf: cut_err(int),
+        gx: cut_err(int),
+        gy: cut_err(int),
+        gz: cut_err(int),
+        adc: cut_err(int),
         ext: empty.value(0),
-        _: nl,
-    }};
-    preceded(tag_nl("[BLOCKS]"), repeat(0.., block)).parse_next(input)
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("block record"));
+
+    preceded(tag_nl("[BLOCKS]"), repeat(0.., block))
+        .context(StrContext::Label("[BLOCKS] section"))
+        .parse_next(input)
 }
 
 pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
     let rf = seq! {Rf {
         id: int,
-        amp: float,
-        mag_id: int,
-        phase_id: int,
+        amp: cut_err(float),
+        mag_id: cut_err(int),
+        phase_id: cut_err(int),
         time_id: empty.value(0),
-        delay: int.map(|d: u32| d as f64 * 1e-6),
-        freq: float,
-        phase: float,
-        // Shim indices of 0, 0 are treated as no shim - 0 is an invalid shape_id
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        freq: cut_err(float),
+        phase: cut_err(float),
         shim_id: opt((int, int)).map(|s| match s {
-            Some((0, 0)) => None,
+            Some((0, 0)) => None,  // no shim - 0 is an invalid shape_id
             _ => s,
         }),
-        _: nl,
-    }};
-    preceded(tag_nl("[RF]"), repeat(0.., rf)).parse_next(input)
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("rf record"));
+
+    preceded(tag_nl("[RF]"), repeat(0.., rf))
+        .context(StrContext::Label("[RF] section"))
+        .parse_next(input)
 }
 
 pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
     let grad = || {
         seq! {Gradient {
             id: int,
-            amp: float,
-            shape_id: int,
+            amp: cut_err(float),
+            shape_id: cut_err(int),
             time_id: empty.value(0),
-            delay: int.map(|d: u32| d as f64 * 1e-6),
-            _: nl,
+            delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+            _: cut_err(nl),
         }}
+        .context(StrContext::Label("gradient record"))
     };
-    preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad())).parse_next(input)
+
+    preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad()))
+        .context(StrContext::Label("[GRADIENTS] section"))
+        .parse_next(input)
 }
 
 pub fn traps(input: &mut &str) -> ModalResult<Vec<Trap>> {
     let trap = seq! {Trap {
         id: int,
-        amp: float,
-        rise: int.map(|d: u32| d as f64 * 1e-6),
-        flat: int.map(|d: u32| d as f64 * 1e-6),
-        fall: int.map(|d: u32| d as f64 * 1e-6),
-        delay: int.map(|d: u32| d as f64 * 1e-6),
-        _: nl,
-    }};
-    preceded(tag_nl("[TRAP]"), repeat(0.., trap)).parse_next(input)
+        amp: cut_err(float),
+        rise: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        flat: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        fall: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("trap record"));
+
+    preceded(tag_nl("[TRAP]"), repeat(0.., trap))
+        .context(StrContext::Label("[TRAP] section"))
+        .parse_next(input)
 }
 
 pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
     let adc = seq! {Adc {
         id: int,
-        num: int,
-        dwell: float.map(|d: f64| d * 1e-9),
-        delay: int.map(|d: u32| d as f64 * 1e-6),
-        freq: float,
-        phase: float,
-        _: nl,
-    }};
-    preceded(tag_nl("[ADC]"), repeat(0.., adc)).parse_next(input)
+        num: cut_err(int),
+        dwell: cut_err(float).map(|d: f64| d * 1e-9),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        freq: cut_err(float),
+        phase: cut_err(float),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("adc record"));
+
+    preceded(tag_nl("[ADC]"), repeat(0.., adc))
+        .context(StrContext::Label("[ADC] section"))
+        .parse_next(input)
 }
 
 pub fn delays(input: &mut &str) -> ModalResult<Vec<Delay>> {
     let delay = seq! {Delay {
         id: int,
-        delay: float.map(|d: f64| d * 1e-6),
-        _: nl,
-    }};
-    preceded(tag_nl("[DELAYS]"), repeat(0.., delay)).parse_next(input)
+        delay: cut_err(float).map(|d: f64| d * 1e-6),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("delay record"));
+
+    preceded(tag_nl("[DELAYS]"), repeat(0.., delay))
+        .context(StrContext::Label("[DELAYS] section"))
+        .parse_next(input)
 }
 
 pub fn raw_shape(input: &mut &str) -> ModalResult<(u32, (u32, Vec<f64>))> {
@@ -150,7 +173,9 @@ pub fn raw_shape(input: &mut &str) -> ModalResult<(u32, (u32, Vec<f64>))> {
     };
     let samples = || repeat(0.., terminated(float, nl));
 
-    seq!((shape_id(), (num_samples(), samples()))).parse_next(input)
+    seq!((shape_id(), cut_err((num_samples(), samples()))))
+        .context(StrContext::Label("shape"))
+        .parse_next(input)
 }
 
 pub fn shapes(input: &mut &str) -> ModalResult<Vec<Shape>> {
@@ -163,5 +188,8 @@ pub fn shapes(input: &mut &str) -> ModalResult<Vec<Shape>> {
             decompress_shape(samples, num_samples).map(|samples| Shape { id, samples })
         }
     });
-    preceded(tag_nl("[SHAPES]"), repeat(0.., shape)).parse_next(input)
+
+    preceded(tag_nl("[SHAPES]"), repeat(0.., shape))
+        .context(StrContext::Label("[SHAPES] section"))
+        .parse_next(input)
 }

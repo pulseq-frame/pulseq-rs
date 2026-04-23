@@ -49,3 +49,7 @@ fn tse() {
 fn ute() {
     Sequence::from_file("../test-seqs/pypulseq/1.4.0/ute.seq").unwrap();
 }
+#[test]
+fn flash_je() {
+    Sequence::from_file("assets/flash_je.seq").unwrap();
+}

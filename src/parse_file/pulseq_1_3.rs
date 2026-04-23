@@ -1,5 +1,6 @@
 use winnow::ascii::till_line_ending;
-use winnow::combinator::{alt, opt, preceded, repeat, seq};
+use winnow::combinator::{alt, cut_err, opt, preceded, repeat, seq};
+use winnow::error::StrContext;
 use winnow::prelude::*;
 
 use super::pulseq_1_2::{adcs, definitions, delays, gradients, rfs, shapes, traps, version};
@@ -32,16 +33,20 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
     let block = seq! { Block {
         id: int,
-        dur: int.map(BlockDuration::DelayId),
-        rf: int,
-        gx: int,
-        gy: int,
-        gz: int,
-        adc: int,
-        ext: int,
-        _: nl,
-    }};
-    preceded(tag_nl("[BLOCKS]"), repeat(0.., block)).parse_next(input)
+        dur: cut_err(int).map(BlockDuration::DelayId),
+        rf: cut_err(int),
+        gx: cut_err(int),
+        gy: cut_err(int),
+        gz: cut_err(int),
+        adc: cut_err(int),
+        ext: cut_err(int),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("block record"));
+
+    preceded(tag_nl("[BLOCKS]"), repeat(0.., block))
+        .context(StrContext::Label("[BLOCKS] section"))
+        .parse_next(input)
 }
 
 pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
@@ -57,33 +62,39 @@ pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
     let ext_ref = || {
         seq! { ExtensionRef {
             id: int,
-            spec_id: int,
-            obj_id: int,
-            next: int,
-            _: nl,
+            spec_id: cut_err(int),
+            obj_id: cut_err(int),
+            next: cut_err(int),
+            _: cut_err(nl),
         }}
+        .context(StrContext::Label("extension reference"))
     };
+
     let ext_obj = || {
         seq! { ExtensionObject {
             id: int,
             data: till_line_ending.map(|s: &str| s.trim().to_owned()),
-            _: nl,
+            _: cut_err(nl),
         }}
+        .context(StrContext::Label("extension object"))
     };
+
     let ext_spec = move || {
         seq! { ExtensionSpec {
             _: tag_ws("extension"),
-            name: ident,
-            id: int,
-            _: nl,
-            instances: repeat(1.., ext_obj())
+            name: cut_err(ident),
+            id: cut_err(int),
+            _: cut_err(nl),
+            instances: cut_err(repeat(1.., ext_obj())),
         }}
+        .context(StrContext::Label("extension specification"))
     };
 
     seq! { Extensions {
         _: tag_nl("[EXTENSIONS]"),
         refs: repeat(0.., ext_ref()),
-        specs: repeat(0.., ext_spec())
+        specs: repeat(0.., ext_spec()),
     }}
+    .context(StrContext::Label("[EXTENSIONS] section"))
     .parse_next(input)
 }

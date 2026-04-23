@@ -1,5 +1,6 @@
 use winnow::ascii::{alphanumeric1, till_line_ending};
-use winnow::combinator::{alt, delimited, opt, preceded, repeat, seq};
+use winnow::combinator::{alt, cut_err, delimited, opt, preceded, repeat, seq};
+use winnow::error::StrContext;
 use winnow::prelude::*;
 
 use super::pulseq_1_2::{adcs, definitions, shapes, traps, version};
@@ -31,68 +32,81 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
 }
 
 pub fn signature(input: &mut &str) -> ModalResult<Signature> {
-    let mut typ = delimited(
+    let mut typ = cut_err(delimited(
         tag_ws("Type"),
         alphanumeric1.map(|s: &str| s.to_owned()),
         nl,
-    );
-    let mut hash = delimited(
+    ));
+    let mut hash = cut_err(delimited(
         tag_ws("Hash"),
         till_line_ending.map(|s: &str| s.trim().to_owned()),
         nl,
-    );
+    ));
 
     seq! { Signature {
         _: tag_nl("[SIGNATURE]"),
         typ: typ,
-        hash: hash
+        hash: hash,
     }}
+    .context(StrContext::Label("[SIGNATURE] section"))
     .parse_next(input)
 }
 
 pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
     let block = seq! { Block {
         id: int,
-        dur: int.map(BlockDuration::Duration),
-        rf: int,
-        gx: int,
-        gy: int,
-        gz: int,
-        adc: int,
-        ext: int,
-        _: nl,
-    }};
-    preceded(tag_nl("[BLOCKS]"), repeat(0.., block)).parse_next(input)
+        dur: cut_err(int).map(BlockDuration::Duration),
+        rf: cut_err(int),
+        gx: cut_err(int),
+        gy: cut_err(int),
+        gz: cut_err(int),
+        adc: cut_err(int),
+        ext: cut_err(int),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("block record"));
+
+    preceded(tag_nl("[BLOCKS]"), repeat(0.., block))
+        .context(StrContext::Label("[BLOCKS] section"))
+        .parse_next(input)
 }
 
 pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
     let rf = seq! {Rf {
         id: int,
-        amp: float,
-        mag_id: int,
-        phase_id: int,
-        time_id: int,
-        delay: int.map(|d: u32| d as f64 * 1e-6),
-        freq: float,
-        phase: float,
+        amp: cut_err(float),
+        mag_id: cut_err(int),
+        phase_id: cut_err(int),
+        time_id: cut_err(int),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        freq: cut_err(float),
+        phase: cut_err(float),
         // Shim indices of 0, 0 are treated as no shim - 0 is an invalid shape_id
         shim_id: opt((int, int)).map(|s| match s {
             Some((0, 0)) => None,
             _ => s,
         }),
-        _: nl,
-    }};
-    preceded(tag_nl("[RF]"), repeat(0.., rf)).parse_next(input)
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("rf record"));
+
+    preceded(tag_nl("[RF]"), repeat(0.., rf))
+        .context(StrContext::Label("[RF] section"))
+        .parse_next(input)
 }
 
 pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
     let grad = seq! {Gradient {
         id: int,
-        amp: float,
-        shape_id: int,
-        time_id: int,
-        delay: int.map(|d: u32| d as f64 * 1e-6),
-        _: nl,
-    }};
-    preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad)).parse_next(input)
+        amp: cut_err(float),
+        shape_id: cut_err(int),
+        time_id: cut_err(int),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("gradient record"));
+
+    preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad))
+        .context(StrContext::Label("[GRADIENTS] section"))
+        .parse_next(input)
 }
