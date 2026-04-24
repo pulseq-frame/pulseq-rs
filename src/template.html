@@ -1,76 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<title>{{TITLE}}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
-<style>
-  :root { color-scheme: light; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    margin: 2em auto;
-    max-width: 1200px;
-    padding: 0 1em;
-    color: #222;
-    background: #fff;
-  }
-  h1 { font-size: 1.4em; margin-bottom: 0.2em; }
-  h2 { margin-top: 2em; border-bottom: 1px solid #ddd; padding-bottom: 0.3em; font-size: 1.15em; }
-  h3 { margin: 1em 0 0.4em; font-size: 1em; color: #444; }
-  nav { margin: 1em 0 2em; padding: 0.5em 0.8em; background: #f6f8fa; border-radius: 4px; }
-  nav a { margin-right: 1em; }
-  a { color: #0366d6; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  table { border-collapse: collapse; font-size: 0.88em; }
-  th, td { padding: 3px 8px; border: 1px solid #e1e4e8; text-align: right; white-space: nowrap; }
-  th { background: #f6f8fa; text-align: left; font-weight: 600; }
-  td:first-child, th:first-child { text-align: left; }
-  tr:target { background: #fffbd6; }
-  .plot { width: 100%; height: 260px; margin: 0.2em 0 1.5em; }
-  .plot.trap { height: 120px; max-width: 520px; }
-  dl.definitions { display: grid; grid-template-columns: max-content 1fr; gap: 0.1em 1em; }
-  dl.definitions dt { font-weight: 600; font-family: ui-monospace, monospace; }
-  dl.definitions dd { margin: 0; font-family: ui-monospace, monospace; }
-  .meta { color: #586069; font-size: 0.9em; }
-  .empty { color: #888; font-style: italic; }
-  .shape-block, .trap-block { margin-bottom: 1em; padding: 0.4em 0.6em; border: 1px solid #e1e4e8; border-radius: 4px; }
-  .shape-block h3, .trap-block h3 { margin-top: 0; }
-  details > summary { cursor: pointer; color: #586069; font-size: 0.85em; }
-  ul.ext-objs { list-style: none; padding-left: 0.5em; margin: 0.3em 0; font-family: ui-monospace, monospace; font-size: 0.85em; }
-  ul.ext-objs li { margin: 0.1em 0; }
-</style>
+  <meta charset="utf-8">
+  <title>__TITLE__</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <style>
+    :root {
+      color-scheme: light;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 2em auto;
+      max-width: 800px;
+      padding: 0 1em 4em;
+      color: #222;
+      background: #fff;
+    }
+
+    h1 {
+      font-size: 1.4em;
+      margin-bottom: 0.2em;
+    }
+
+    h2 {
+      margin-top: 2em;
+      border-bottom: 1px solid #ddd;
+      padding-bottom: 0.3em;
+      font-size: 1.15em;
+    }
+
+    h3 {
+      margin: 1em 0 0.4em;
+      font-size: 1em;
+      color: #444;
+    }
+
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 10;
+      padding-top: 0.5em;
+      padding-bottom: 0.5em;
+      padding-left: max(1em, calc((100% - 800px) / 2 + 1em));
+      padding-right: max(1em, calc((100% - 800px) / 2 + 1em));
+      background: #f6f8fa;
+      border-top: 1px solid #e1e4e8;
+    }
+
+    nav a {
+      margin-right: 1em;
+    }
+
+    a {
+      color: #0366d6;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    table {
+      border-collapse: collapse;
+      font-size: 0.88em;
+      width: 100%;
+    }
+
+    tr[id] {
+      scroll-margin-top: 2em;
+    }
+
+    th {
+      background: #f6f8fa;
+      font-weight: 600;
+    }
+
+    th,
+    td {
+      padding: 3px 8px;
+      border: 1px solid #e1e4e8;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    th:first-child,
+    td:first-child {
+      width: 1%;
+    }
+
+    table.definitions {
+      font-family: ui-monospace, monospace;
+      font-size: 0.9em;
+    }
+
+    table.definitions th,
+    table.definitions td {
+      text-align: left;
+    }
+
+    tr:target {
+      background: #fffbd6;
+    }
+
+    .table-wrap {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid #e1e4e8;
+      border-radius: 4px;
+      margin: 0.3em 0 1em;
+    }
+
+    .table-wrap table {
+      border: none;
+    }
+
+    .table-wrap thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      box-shadow: inset 0 -1px 0 #e1e4e8;
+    }
+
+    .plot {
+      width: 100%;
+      height: 260px;
+      margin: 0.2em 0 1.5em;
+    }
+
+    .meta {
+      color: #586069;
+      font-size: 0.9em;
+    }
+
+    .empty {
+      color: #888;
+      font-style: italic;
+    }
+
+    details>summary {
+      cursor: pointer;
+      color: #586069;
+      font-size: 0.85em;
+    }
+  </style>
 </head>
+
 <body>
-<h1>{{TITLE}}</h1>
-<p class="meta">{{META}}</p>
+  <nav>
+    <a href="#definitions">Definitions</a>
+    <a href="#blocks">Blocks</a>
+    <a href="#rfs">RF</a>
+    <a href="#gradients">Gradients</a>
+    <a href="#traps">Traps</a>
+    <a href="#adcs">ADC</a>
+    <a href="#delays">Delays</a>
+    <a href="#extensions">Extensions</a>
+    <a href="#shapes">Shapes</a>
+  </nav>
 
-<nav>
-  <a href="#definitions">Definitions</a>
-  <a href="#blocks">Blocks</a>
-  <a href="#rfs">RF</a>
-  <a href="#gradients">Gradients</a>
-  <a href="#traps">Traps</a>
-  <a href="#adcs">ADC</a>
-  <a href="#delays">Delays</a>
-  <a href="#extensions">Extensions</a>
-  <a href="#shapes">Shapes</a>
-</nav>
+  <h1>__TITLE__</h1>
+  <p class="meta">__META__</p>
 
-<section id="definitions"><h2>Definitions</h2>{{DEFINITIONS}}</section>
-<section id="blocks"><h2>Blocks</h2>{{BLOCKS}}</section>
-<section id="rfs"><h2>RF events</h2>{{RFS}}</section>
-<section id="gradients"><h2>Arbitrary gradients</h2>{{GRADIENTS}}</section>
-<section id="traps"><h2>Trapezoidal gradients</h2>{{TRAPS}}</section>
-<section id="adcs"><h2>ADC events</h2>{{ADCS}}</section>
-<section id="delays"><h2>Delays</h2>{{DELAYS}}</section>
-<section id="extensions"><h2>Extensions</h2>{{EXTENSIONS}}</section>
-<section id="shapes"><h2>Shapes</h2>{{SHAPES}}</section>
+  <section id="definitions">
+    <h2>Definitions</h2>__DEFINITIONS__
+  </section>
+  <section id="blocks">
+    <h2>Blocks</h2>__BLOCKS__
+  </section>
+  <section id="rfs">
+    <h2>RF events</h2>__RFS__
+  </section>
+  <section id="gradients">
+    <h2>Arbitrary gradients</h2>__GRADIENTS__
+  </section>
+  <section id="traps">
+    <h2>Trapezoidal gradients</h2>__TRAPS__
+  </section>
+  <section id="adcs">
+    <h2>ADC events</h2>__ADCS__
+  </section>
+  <section id="delays">
+    <h2>Delays</h2>__DELAYS__
+  </section>
+  <section id="extensions">
+    <h2>Extensions</h2>__EXTENSIONS__
+  </section>
+  <section id="shapes">
+    <h2>Shapes</h2>__SHAPES__
+  </section>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  var common = { margin: { t: 10, r: 10, b: 30, l: 45 }, showlegend: false };
-  {{PLOT_SCRIPTS}}
-});
-</script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var common = { margin: { t: 10, r: 10, b: 30, l: 45 }, showlegend: false };
+      __PLOT_SCRIPTS__
+    });
+  </script>
 </body>
+
 </html>

@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use pulseq_rs::raw::{
-    Adc, Block, BlockDuration, Delay, ExtensionObject, ExtensionSpec, Extensions, Gradient, Rf,
-    Section, Shape, Signature, Trap, Version,
+    Adc, Block, BlockDuration, Delay, ExtensionSpec, Extensions, Gradient, Rf, Section, Shape,
+    Signature, Trap, Version,
 };
 
 const TEMPLATE: &str = include_str!("template.html");
@@ -76,11 +76,7 @@ fn render(input: &Path, sections: &[Section]) -> String {
             Section::Blocks(b) => s.blocks = render_blocks(b),
             Section::Rfs(r) => s.rfs = render_rfs(r),
             Section::Gradients(g) => s.gradients = render_gradients(g),
-            Section::Traps(t) => {
-                let (html, js) = render_traps(t);
-                s.traps = html;
-                s.plot_scripts.push_str(&js);
-            }
+            Section::Traps(t) => s.traps = render_traps(t),
             Section::Adcs(a) => s.adcs = render_adcs(a),
             Section::Delays(d) => s.delays = render_delays(d),
             Section::Extensions(e) => s.extensions = render_extensions(e),
@@ -95,18 +91,18 @@ fn render(input: &Path, sections: &[Section]) -> String {
     s.meta = render_meta(version, signature);
 
     TEMPLATE
-        .replace("{{TITLE}}", &escape(&input.display().to_string()))
-        .replace("{{META}}", &s.meta)
-        .replace("{{DEFINITIONS}}", or_empty(&s.definitions))
-        .replace("{{BLOCKS}}", or_empty(&s.blocks))
-        .replace("{{RFS}}", or_empty(&s.rfs))
-        .replace("{{GRADIENTS}}", or_empty(&s.gradients))
-        .replace("{{TRAPS}}", or_empty(&s.traps))
-        .replace("{{ADCS}}", or_empty(&s.adcs))
-        .replace("{{DELAYS}}", or_empty(&s.delays))
-        .replace("{{EXTENSIONS}}", or_empty(&s.extensions))
-        .replace("{{SHAPES}}", or_empty(&s.shapes))
-        .replace("{{PLOT_SCRIPTS}}", &s.plot_scripts)
+        .replace("__TITLE__", &escape(&input.display().to_string()))
+        .replace("__META__", &s.meta)
+        .replace("__DEFINITIONS__", or_empty(&s.definitions))
+        .replace("__BLOCKS__", or_empty(&s.blocks))
+        .replace("__RFS__", or_empty(&s.rfs))
+        .replace("__GRADIENTS__", or_empty(&s.gradients))
+        .replace("__TRAPS__", or_empty(&s.traps))
+        .replace("__ADCS__", or_empty(&s.adcs))
+        .replace("__DELAYS__", or_empty(&s.delays))
+        .replace("__EXTENSIONS__", or_empty(&s.extensions))
+        .replace("__SHAPES__", or_empty(&s.shapes))
+        .replace("__PLOT_SCRIPTS__", &s.plot_scripts)
 }
 
 fn or_empty(content: &str) -> &str {
@@ -148,18 +144,21 @@ fn render_meta(v: Option<&Version>, sig: Option<&Signature>) -> String {
 }
 
 fn render_definitions(defs: &[(String, String)]) -> String {
-    let mut s = String::from(r#"<dl class="definitions">"#);
+    let mut s = String::from(
+        "<div class=\"table-wrap\"><table class=\"definitions\"><thead><tr>\
+         <th>key</th><th>value</th></tr></thead><tbody>",
+    );
     for (k, v) in defs {
-        let _ = write!(s, "<dt>{}</dt><dd>{}</dd>", escape(k), escape(v));
+        let _ = write!(s, "<tr><td>{}</td><td>{}</td></tr>", escape(k), escape(v));
     }
-    s.push_str("</dl>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
 fn render_blocks(blocks: &[Block]) -> String {
     let mut s = String::from(
-        "<table><thead><tr>\
-         <th>#</th><th>dur</th><th>rf</th><th>gx</th><th>gy</th><th>gz</th>\
+        "<div class=\"table-wrap\"><table><thead><tr>\
+         <th>num</th><th>dur</th><th>rf</th><th>gx</th><th>gy</th><th>gz</th>\
          <th>adc</th><th>ext</th></tr></thead><tbody>",
     );
     for b in blocks {
@@ -174,7 +173,7 @@ fn render_blocks(blocks: &[Block]) -> String {
         let _ = write!(s, "<td>{}</td>", id_ref("ext-ref", b.ext));
         s.push_str("</tr>");
     }
-    s.push_str("</tbody></table>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
@@ -188,7 +187,7 @@ fn render_dur(d: &BlockDuration) -> String {
 
 fn render_rfs(rfs: &[Rf]) -> String {
     let mut s = String::from(
-        "<table><thead><tr>\
+        "<div class=\"table-wrap\"><table><thead><tr>\
          <th>id</th><th>amp [Hz]</th><th>mag</th><th>phase</th><th>time</th>\
          <th>delay [s]</th><th>freq [Hz]</th><th>phase [rad]</th><th>shim</th>\
          </tr></thead><tbody>",
@@ -210,13 +209,13 @@ fn render_rfs(rfs: &[Rf]) -> String {
         let _ = write!(s, "<td>{shim}</td>");
         s.push_str("</tr>");
     }
-    s.push_str("</tbody></table>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
 fn render_gradients(grads: &[Gradient]) -> String {
     let mut s = String::from(
-        "<table><thead><tr>\
+        "<div class=\"table-wrap\"><table><thead><tr>\
          <th>id</th><th>amp [Hz/m]</th><th>shape</th><th>time</th><th>delay [s]</th>\
          </tr></thead><tbody>",
     );
@@ -229,17 +228,16 @@ fn render_gradients(grads: &[Gradient]) -> String {
         let _ = write!(s, "<td>{:.6}</td>", g.delay);
         s.push_str("</tr>");
     }
-    s.push_str("</tbody></table>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
-fn render_traps(traps: &[Trap]) -> (String, String) {
+fn render_traps(traps: &[Trap]) -> String {
     let mut s = String::from(
-        "<table><thead><tr>\
+        "<div class=\"table-wrap\"><table><thead><tr>\
          <th>id</th><th>amp [Hz/m]</th><th>rise [s]</th><th>flat [s]</th><th>fall [s]</th>\
-         <th>delay [s]</th><th>plot</th></tr></thead><tbody>",
+         <th>delay [s]</th></tr></thead><tbody>",
     );
-    let mut js = String::new();
     for t in traps {
         let _ = write!(s, r#"<tr id="grad-{}">"#, t.id);
         let _ = write!(s, "<td>{}</td>", t.id);
@@ -248,40 +246,15 @@ fn render_traps(traps: &[Trap]) -> (String, String) {
         let _ = write!(s, "<td>{:.6}</td>", t.flat);
         let _ = write!(s, "<td>{:.6}</td>", t.fall);
         let _ = write!(s, "<td>{:.6}</td>", t.delay);
-        let _ = write!(
-            s,
-            r#"<td style="padding:0"><div class="plot trap" id="trap-plot-{}"></div></td>"#,
-            t.id
-        );
         s.push_str("</tr>");
-        // Trapezoid waveform: flat at 0 during delay, rises linearly, plateau, falls back.
-        let t0 = 0.0;
-        let t1 = t.delay;
-        let t2 = t.delay + t.rise;
-        let t3 = t.delay + t.rise + t.flat;
-        let t4 = t.delay + t.rise + t.flat + t.fall;
-        let _ = writeln!(
-            js,
-            "Plotly.newPlot('trap-plot-{id}', [{{x: [{t0},{t1},{t2},{t3},{t4}], \
-              y: [0,0,{amp},{amp},0], mode: 'lines', line: {{width: 1.5}}}}], \
-              Object.assign({{}}, common, {{margin: {{t: 4, r: 4, b: 22, l: 40}}}}), \
-              {{responsive: true, displayModeBar: false}});",
-            id = t.id,
-            amp = t.amp,
-            t0 = t0,
-            t1 = t1,
-            t2 = t2,
-            t3 = t3,
-            t4 = t4,
-        );
     }
-    s.push_str("</tbody></table>");
-    (s, js)
+    s.push_str("</tbody></table></div>");
+    s
 }
 
 fn render_adcs(adcs: &[Adc]) -> String {
     let mut s = String::from(
-        "<table><thead><tr>\
+        "<div class=\"table-wrap\"><table><thead><tr>\
          <th>id</th><th>num</th><th>dwell [s]</th><th>delay [s]</th>\
          <th>freq [Hz]</th><th>phase [rad]</th></tr></thead><tbody>",
     );
@@ -295,13 +268,14 @@ fn render_adcs(adcs: &[Adc]) -> String {
         let _ = write!(s, "<td>{:.4}</td>", a.phase);
         s.push_str("</tr>");
     }
-    s.push_str("</tbody></table>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
 fn render_delays(delays: &[Delay]) -> String {
     let mut s = String::from(
-        "<table><thead><tr><th>id</th><th>delay [s]</th></tr></thead><tbody>",
+        "<div class=\"table-wrap\"><table><thead><tr>\
+         <th>id</th><th>delay [s]</th></tr></thead><tbody>",
     );
     for d in delays {
         let _ = write!(s, r#"<tr id="delay-{}">"#, d.id);
@@ -309,19 +283,18 @@ fn render_delays(delays: &[Delay]) -> String {
         let _ = write!(s, "<td>{:.6}</td>", d.delay);
         s.push_str("</tr>");
     }
-    s.push_str("</tbody></table>");
+    s.push_str("</tbody></table></div>");
     s
 }
 
 fn render_extensions(ext: &Extensions) -> String {
     let mut s = String::new();
 
-    s.push_str("<h3>References</h3>");
     if ext.refs.is_empty() {
-        s.push_str(r#"<p class="empty">(none)</p>"#);
+        s.push_str(r#"<p class="empty">(no references)</p>"#);
     } else {
         s.push_str(
-            "<table><thead><tr>\
+            "<div class=\"table-wrap\"><table><thead><tr>\
              <th>id</th><th>spec</th><th>obj</th><th>next</th></tr></thead><tbody>",
         );
         for r in &ext.refs {
@@ -340,16 +313,11 @@ fn render_extensions(ext: &Extensions) -> String {
             let _ = write!(s, "<td>{}</td>", id_ref("ext-ref", r.next));
             s.push_str("</tr>");
         }
-        s.push_str("</tbody></table>");
+        s.push_str("</tbody></table></div>");
     }
 
-    s.push_str("<h3>Specifications</h3>");
-    if ext.specs.is_empty() {
-        s.push_str(r#"<p class="empty">(none)</p>"#);
-    } else {
-        for spec in &ext.specs {
-            render_ext_spec(&mut s, spec);
-        }
+    for spec in &ext.specs {
+        render_ext_spec(&mut s, spec);
     }
     s
 }
@@ -357,30 +325,28 @@ fn render_extensions(ext: &Extensions) -> String {
 fn render_ext_spec(out: &mut String, spec: &ExtensionSpec) {
     let _ = write!(
         out,
-        r#"<div id="ext-spec-{id}" class="shape-block"><h3>#{id} {name}</h3>"#,
+        r#"<h3 id="ext-spec-{id}">#{id} {name}</h3>"#,
         id = spec.id,
         name = escape(&spec.name),
     );
     if spec.instances.is_empty() {
         out.push_str(r#"<p class="empty">(no instances)</p>"#);
-    } else {
-        out.push_str(r#"<ul class="ext-objs">"#);
-        for obj in &spec.instances {
-            render_ext_obj(out, spec.id, obj);
-        }
-        out.push_str("</ul>");
+        return;
     }
-    out.push_str("</div>");
-}
-
-fn render_ext_obj(out: &mut String, spec_id: u32, obj: &ExtensionObject) {
-    let _ = write!(
-        out,
-        r#"<li id="ext-obj-{spec_id}-{id}"><strong>#{id}</strong> {data}</li>"#,
-        spec_id = spec_id,
-        id = obj.id,
-        data = escape(&obj.data),
+    out.push_str(
+        "<div class=\"table-wrap\"><table><thead><tr>\
+         <th>id</th><th>data</th></tr></thead><tbody>",
     );
+    for obj in &spec.instances {
+        let _ = write!(
+            out,
+            r#"<tr id="ext-obj-{spec_id}-{id}"><td>{id}</td><td>{data}</td></tr>"#,
+            spec_id = spec.id,
+            id = obj.id,
+            data = escape(&obj.data),
+        );
+    }
+    out.push_str("</tbody></table></div>");
 }
 
 fn render_shapes(shapes: &[Shape]) -> (String, String) {
@@ -389,7 +355,7 @@ fn render_shapes(shapes: &[Shape]) -> (String, String) {
     for shape in shapes {
         let _ = write!(
             html,
-            r#"<div class="shape-block"><h3 id="shape-{id}">Shape #{id} ({n} samples)</h3><div class="plot" id="shape-plot-{id}"></div></div>"#,
+            r#"<h3 id="shape-{id}">Shape #{id} ({n} samples)</h3><div class="plot" id="shape-plot-{id}"></div>"#,
             id = shape.id,
             n = shape.samples.len(),
         );
