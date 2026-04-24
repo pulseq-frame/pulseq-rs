@@ -1,8 +1,8 @@
-use std::env;
 use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+
+use clap::Parser;
 
 use pulseq_rs::raw::{
     Adc, Block, BlockDuration, Delay, ExtensionSpec, Extensions, Gradient, Rf, Section, Shape,
@@ -11,37 +11,56 @@ use pulseq_rs::raw::{
 
 const TEMPLATE: &str = include_str!("template.html");
 
-fn main() -> ExitCode {
-    let mut args = env::args();
-    let prog = args.next().unwrap_or_else(|| "pulseq-rs".into());
-    let Some(path) = args.next() else {
-        eprintln!("usage: {prog} <seq-file>");
-        return ExitCode::from(2);
-    };
-    let input = PathBuf::from(path);
-    let source = match fs::read_to_string(&input) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("read error: {e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let sections = match pulseq_rs::parse_file(&source) {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("parse error: {e}");
-            return ExitCode::FAILURE;
-        }
+/// Parse a pulseq .seq file and render it as a standalone HTML viewer.
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Path to the input .seq file.
+    input: PathBuf,
+
+    /// Write the rendered HTML to this path. Defaults to a temporary file.
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<PathBuf>,
+
+    /// Open the rendered HTML in the default browser.
+    /// Implied when no --output is given.
+    #[arg(long)]
+    open: bool,
+}
+
+fn main() -> Result<(), String> {
+    let cli = Cli::parse();
+
+    // Resolve output path + default for --open.
+    let (output, open) = match cli.output {
+        Some(path) => (path, cli.open),
+        None => (default_output_path(&cli.input), true),
     };
 
-    let html = render(&input, &sections);
-    let out = input.with_extension("html");
-    if let Err(e) = fs::write(&out, html) {
-        eprintln!("write error: {e}");
-        return ExitCode::FAILURE;
+    let source = fs::read_to_string(&cli.input)
+        .map_err(|e| format!("failed to read {}: {e}", cli.input.display()))?;
+
+    let sections = pulseq_rs::parse_file(&source).map_err(|e| format!("parse error: {e}"))?;
+
+    let html = render(&cli.input, &sections);
+
+    fs::write(&output, html).map_err(|e| format!("failed to write {}: {e}", output.display()))?;
+
+    println!("wrote {}", output.display());
+
+    if open {
+        open::that(&output).map_err(|e| format!("failed to open {}: {e}", output.display()))?;
     }
-    println!("wrote {}", out.display());
-    ExitCode::SUCCESS
+
+    Ok(())
+}
+
+fn default_output_path(input: &Path) -> PathBuf {
+    let stem = input
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "pulseq".into());
+    std::env::temp_dir().join(format!("{stem}-{}.html", std::process::id()))
 }
 
 // ---------------------------------------------------------------------------
