@@ -1,37 +1,6 @@
 use pulseq_rs::raw::BlockDuration;
 use std::fmt::Write;
 
-/// Render a table with sticky headers. The `name` is used both as the table's
-/// CSS class and as the prefix for each row's anchor id (`<tr id="{name}-{col0}">`).
-/// Tables that aren't actually navigated to still get row ids — harmless,
-/// just unused.
-#[allow(unused_must_use)]
-pub fn render_table<const COLUMNS: usize>(
-    name: &str,
-    column_names: [&str; COLUMNS],
-    rows: impl Iterator<Item = [String; COLUMNS]>,
-) -> String {
-    let mut s = String::new();
-    write!(
-        s,
-        "<div class='table-wrap'><table class='{name}'><thead><tr>"
-    );
-    for col in column_names {
-        write!(s, "<th>{col}</th>");
-    }
-    write!(s, "</tr></thead><tbody>");
-    for row in rows {
-        write!(s, r#"<tr id="{name}-{}">"#, row[0]);
-        for content in &row {
-            write!(s, "<td>{content}</td>");
-        }
-        write!(s, "</tr>");
-    }
-    write!(s, "</tbody></table></div>");
-
-    s
-}
-
 pub fn render_dur(d: &BlockDuration) -> String {
     match d {
         BlockDuration::Duration(n) => format!("{n}"),

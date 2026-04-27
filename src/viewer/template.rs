@@ -2,6 +2,7 @@ use std::fmt::Write;
 use std::path::Path;
 
 const TEMPLATE: &str = include_str!("template.html");
+pub const EMPTY_SECTION: &str = "<p class='empty'>(not present)</p>";
 
 pub struct Template {
     pub meta: String,
@@ -13,8 +14,7 @@ pub struct Template {
     pub adcs: Table<6>,
     pub delays: Table<2>,
     pub ext_refs: Table<4>,
-    pub ext_specs: Vec<Table<2>>,
-    pub extensions: String,
+    pub ext_specs: Vec<ExtSpec>,
     pub shapes: String,
     pub plot_scripts: String,
 }
@@ -42,7 +42,10 @@ impl Template {
                     "shim",
                 ],
             ),
-            gradients: Table::new("grad", ["id", "amp [Hz/m]", "shape", "time", "delay [s]"]),
+            gradients: Table::new(
+                "grad",
+                ["id", "amp [Hz/m]", "shape", "time", "delay [s]"],
+            ),
             traps: Table::new(
                 "grad",
                 [
@@ -68,7 +71,6 @@ impl Template {
             delays: Table::new("delay", ["id", "delay [s]"]),
             ext_refs: Table::new("ext-ref", ["id", "spec", "obj", "next"]),
             ext_specs: Vec::new(),
-            extensions: String::new(),
             shapes: String::new(),
             plot_scripts: String::new(),
         }
@@ -80,7 +82,7 @@ impl Template {
             .iter()
             .map(|ext_spec| ext_spec.render())
             .collect();
-    
+
         TEMPLATE
             .replace(
                 "__TITLE__",
@@ -96,30 +98,21 @@ impl Template {
             .replace("__DELAYS__", &self.delays.render())
             .replace("__EXT_REFS__", &self.ext_refs.render())
             .replace("__EXT_SPECS__", &ext_specs)
-            .replace("__EXTENSIONS__", or_empty(&self.extensions))
-            .replace("__SHAPES__", or_empty(&self.shapes))
+            .replace("__SHAPES__", &self.shapes)
             .replace("__PLOT_SCRIPTS__", &self.plot_scripts)
     }
 }
 
-fn or_empty(content: &str) -> &str {
-    if content.is_empty() {
-        r#"<p class="empty">(not present)</p>"#
-    } else {
-        content
-    }
-}
-
 pub struct Table<const COLUMNS: usize> {
-    pub name: &'static str,
+    pub name: String,
     pub column_names: [&'static str; COLUMNS],
     pub rows: Vec<[String; COLUMNS]>,
 }
 
 impl<const COLUMNS: usize> Table<COLUMNS> {
-    pub fn new(name: &'static str, column_names: [&'static str; COLUMNS]) -> Self {
+    pub fn new(name: impl Into<String>, column_names: [&'static str; COLUMNS]) -> Self {
         Self {
-            name,
+            name: name.into(),
             column_names,
             rows: Vec::new(),
         }
@@ -128,7 +121,7 @@ impl<const COLUMNS: usize> Table<COLUMNS> {
     #[allow(unused_must_use)]
     pub fn render(&self) -> String {
         if self.rows.is_empty() {
-            return "<p class='empty'>(not present)</p>".to_string();
+            return EMPTY_SECTION.to_string();
         }
 
         let mut s = String::new();
@@ -151,5 +144,32 @@ impl<const COLUMNS: usize> Table<COLUMNS> {
         write!(s, "</tbody></table></div>");
 
         s
+    }
+}
+
+pub struct ExtSpec {
+    pub spec_id: u32,
+    pub name: String,
+    pub table: Table<2>,
+}
+
+impl ExtSpec {
+    pub fn new(spec_id: u32, name: String) -> Self {
+        Self {
+            spec_id,
+            name,
+            table: Table::new(format!("ext-obj-{}", spec_id), ["id", "data"]),
+        }
+    }
+
+    pub fn render(&self) -> String {
+        let mut out = format!(
+            "<h3 id='ext-spec-{id}'>#{id} {name}</h3>",
+            id = self.spec_id,
+            name = super::util::escape(&self.name),
+        );
+
+        out.push_str(&self.table.render());
+        out
     }
 }

@@ -2,15 +2,14 @@ use std::fmt::Write;
 use std::path::Path;
 
 use pulseq_rs::raw::{
-    Adc, Block, Delay, ExtensionSpec, Extensions, Gradient, Rf, Section, Shape, Signature, Trap,
-    Version,
+    Adc, Block, Delay, Extensions, Gradient, Rf, Section, Shape, Signature, Trap, Version,
 };
 
 mod template;
 mod util;
 use util::*;
 
-use crate::viewer::template::{Table, Template};
+use crate::viewer::template::{ExtSpec, Template};
 
 pub fn render(input: &Path, sections: &[Section]) -> String {
     let tmpl = &mut template::Template::new();
@@ -28,14 +27,11 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
             Section::Traps(t) => populate_traps(tmpl, t),
             Section::Adcs(a) => populate_adcs(tmpl, a),
             Section::Delays(d) => populate_delays(tmpl, d),
-            Section::Extensions(e) => tmpl.extensions = populate_extensions(tmpl, e),
-            Section::Shapes(sh) => {
-                let (html, js) = render_shapes(sh);
-                tmpl.shapes = html;
-                tmpl.plot_scripts.push_str(&js);
-            }
+            Section::Extensions(e) => populate_extensions(tmpl, e),
+            Section::Shapes(sh) => populate_shapes(tmpl, sh),
         }
     }
+    // The pulseq parser expects a version section - we don't even get here if its missing
     tmpl.meta = render_meta(
         version.expect("version section (parsing fails without)"),
         signature,
@@ -90,7 +86,7 @@ fn populate_blocks(template: &mut Template, blocks: &[Block]) {
     }
 }
 
-pub fn populate_rfs(template: &mut Template, rfs: &[Rf]) {
+fn populate_rfs(template: &mut Template, rfs: &[Rf]) {
     for rf in rfs {
         let shim = match rf.shim_id {
             None => "-".to_string(),
@@ -159,7 +155,7 @@ fn populate_delays(template: &mut Template, delays: &[Delay]) {
     }
 }
 
-fn populate_extensions(template: &mut Template, ext: &Extensions) -> String {
+fn populate_extensions(template: &mut Template, ext: &Extensions) {
     for ext_ref in &ext.refs {
         let obj = if ext_ref.obj_id == 0 {
             "0".to_string()
@@ -177,46 +173,32 @@ fn populate_extensions(template: &mut Template, ext: &Extensions) -> String {
         ]);
     }
 
-    let mut s = String::new();
     for spec in &ext.specs {
-        populate_ext_spec(&mut s, spec);
+        let mut ext_spec = ExtSpec::new(spec.id, spec.name.clone());
+        for obj in &spec.instances {
+            ext_spec
+                .table
+                .rows
+                .push([obj.id.to_string(), escape(&obj.data)]);
+        }
+        template.ext_specs.push(ext_spec);
     }
-    s
 }
 
-fn populate_ext_spec(out: &mut String, spec: &ExtensionSpec) {
-    let _ = write!(
-        out,
-        r#"<h3 id="ext-spec-{id}">#{id} {name}</h3>"#,
-        id = spec.id,
-        name = escape(&spec.name),
-    );
-    if spec.instances.is_empty() {
-        out.push_str(r#"<p class="empty">(no instances)</p>"#);
-        return;
+fn populate_shapes(template: &mut Template, shapes: &[Shape]) {
+    if shapes.is_empty() {
+        template.shapes = template::EMPTY_SECTION.to_owned();
     }
-    let name = format!("ext-obj-{}", spec.id);
-    out.push_str(&render_table(
-        &name,
-        ["id", "data"],
-        spec.instances
-            .iter()
-            .map(|obj| [obj.id.to_string(), escape(&obj.data)]),
-    ));
-}
 
-fn render_shapes(shapes: &[Shape]) -> (String, String) {
-    let mut html = String::new();
-    let mut js = String::new();
     for shape in shapes {
         let _ = write!(
-            html,
-            r#"<h3 id="shape-{id}">Shape #{id} ({n} samples)</h3><div class="plot" id="shape-plot-{id}"></div>"#,
+            template.shapes,
+            "<h3 id='shape-{id}'>Shape #{id} ({n} samples)</h3><div class='plot' id='shape-plot-{id}'></div>",
             id = shape.id,
             n = shape.samples.len(),
         );
         let _ = writeln!(
-            js,
+            template.plot_scripts,
             "Plotly.newPlot('shape-plot-{id}', [{{y: {y}, mode: 'lines', \
               line: {{width: 1.2}}}}], \
               Object.assign({{}}, common, {{xaxis: {{title: 'sample'}}}}), \
@@ -225,5 +207,4 @@ fn render_shapes(shapes: &[Shape]) -> (String, String) {
             y = json_floats(&shape.samples),
         );
     }
-    (html, js)
 }
