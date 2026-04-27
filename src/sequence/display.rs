@@ -120,7 +120,7 @@ impl<T> RefPrinter<T> {
         if let Some(rc) = opt_rc {
             let tmp = Arc::as_ptr(rc) as usize;
             let next_id = self.0.len() + 1;
-            let (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
+            let &mut (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
             format!("{id:3}")
         } else {
             "  -".to_owned()
@@ -130,7 +130,7 @@ impl<T> RefPrinter<T> {
     fn print(&mut self, rc: &Arc<T>) -> String {
         let tmp = Arc::as_ptr(rc) as usize;
         let next_id = self.0.len() + 1;
-        let (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
+        let &mut (_, ref id) = self.0.entry(tmp).or_insert((rc.clone(), next_id));
         format!("{id:3}")
     }
 }
