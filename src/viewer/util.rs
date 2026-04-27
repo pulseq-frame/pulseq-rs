@@ -1,21 +1,6 @@
 use pulseq_rs::raw::BlockDuration;
 use std::fmt::Write;
 
-#[derive(Default)]
-pub struct Slots {
-    pub meta: String,
-    pub definitions: String,
-    pub blocks: String,
-    pub rfs: String,
-    pub gradients: String,
-    pub traps: String,
-    pub adcs: String,
-    pub delays: String,
-    pub extensions: String,
-    pub shapes: String,
-    pub plot_scripts: String,
-}
-
 /// Render a table with sticky headers. The `name` is used both as the table's
 /// CSS class and as the prefix for each row's anchor id (`<tr id="{name}-{col0}">`).
 /// Tables that aren't actually navigated to still get row ids — harmless,

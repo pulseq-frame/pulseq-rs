@@ -6,13 +6,14 @@ use pulseq_rs::raw::{
     Version,
 };
 
+mod template;
 mod util;
 use util::*;
 
-const TEMPLATE: &str = include_str!("template.html");
+use crate::viewer::template::{Table, Template};
 
 pub fn render(input: &Path, sections: &[Section]) -> String {
-    let mut s = Slots::default();
+    let tmpl = &mut template::Template::new();
     let mut version: Option<&Version> = None;
     let mut signature: Option<&Signature> = None;
 
@@ -20,63 +21,42 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         match section {
             Section::Version(v) => version = Some(v),
             Section::Signature(sig) => signature = Some(sig),
-            Section::Definitions(d) => s.definitions = render_definitions(d),
-            Section::Blocks(b) => s.blocks = render_blocks(b),
-            Section::Rfs(r) => s.rfs = render_rfs(r),
-            Section::Gradients(g) => s.gradients = render_gradients(g),
-            Section::Traps(t) => s.traps = render_traps(t),
-            Section::Adcs(a) => s.adcs = render_adcs(a),
-            Section::Delays(d) => s.delays = render_delays(d),
-            Section::Extensions(e) => s.extensions = render_extensions(e),
+            Section::Definitions(d) => populate_definitions(tmpl, d),
+            Section::Blocks(b) => populate_blocks(tmpl, b),
+            Section::Rfs(r) => populate_rfs(tmpl, r),
+            Section::Gradients(g) => populate_gradients(tmpl, g),
+            Section::Traps(t) => populate_traps(tmpl, t),
+            Section::Adcs(a) => populate_adcs(tmpl, a),
+            Section::Delays(d) => populate_delays(tmpl, d),
+            Section::Extensions(e) => tmpl.extensions = populate_extensions(tmpl, e),
             Section::Shapes(sh) => {
                 let (html, js) = render_shapes(sh);
-                s.shapes = html;
-                s.plot_scripts.push_str(&js);
+                tmpl.shapes = html;
+                tmpl.plot_scripts.push_str(&js);
             }
         }
     }
+    tmpl.meta = render_meta(
+        version.expect("version section (parsing fails without)"),
+        signature,
+    );
 
-    s.meta = render_meta(version, signature);
-
-    TEMPLATE
-        .replace("__TITLE__", &escape(&input.display().to_string()))
-        .replace("__META__", &s.meta)
-        .replace("__DEFINITIONS__", or_empty(&s.definitions))
-        .replace("__BLOCKS__", or_empty(&s.blocks))
-        .replace("__RFS__", or_empty(&s.rfs))
-        .replace("__GRADIENTS__", or_empty(&s.gradients))
-        .replace("__TRAPS__", or_empty(&s.traps))
-        .replace("__ADCS__", or_empty(&s.adcs))
-        .replace("__DELAYS__", or_empty(&s.delays))
-        .replace("__EXTENSIONS__", or_empty(&s.extensions))
-        .replace("__SHAPES__", or_empty(&s.shapes))
-        .replace("__PLOT_SCRIPTS__", &s.plot_scripts)
-}
-
-fn or_empty(content: &str) -> &str {
-    if content.is_empty() {
-        r#"<p class="empty">(not present)</p>"#
-    } else {
-        content
-    }
+    tmpl.render(input)
 }
 
 // ---------------------------------------------------------------------------
 // Section renderers
 // ---------------------------------------------------------------------------
 
-fn render_meta(v: Option<&Version>, sig: Option<&Signature>) -> String {
-    let mut out = String::new();
-    if let Some(v) = v {
-        let _ = write!(
-            out,
-            "pulseq {}.{}.{}{}",
-            v.major,
-            v.minor,
-            v.revision,
-            v.rev_suppl.as_deref().unwrap_or("")
-        );
-    }
+fn render_meta(v: &Version, sig: Option<&Signature>) -> String {
+    let mut out = format!(
+        "pulseq {}.{}.{}{}",
+        v.major,
+        v.minor,
+        v.revision,
+        v.rev_suppl.as_deref().unwrap_or("")
+    );
+
     if let Some(sig) = sig {
         if !out.is_empty() {
             out.push_str(" &middot; ");
@@ -86,175 +66,125 @@ fn render_meta(v: Option<&Version>, sig: Option<&Signature>) -> String {
     out
 }
 
-fn render_definitions(defs: &[(String, String)]) -> String {
-    render_table(
-        "definitions",
-        ["key", "value"],
-        defs.iter().map(|(k, v)| [escape(k), escape(v)]),
-    )
+fn populate_definitions(template: &mut Template, defs: &[(String, String)]) {
+    for def in defs {
+        template
+            .definitions
+            .rows
+            .push([escape(&def.0), escape(&def.1)]);
+    }
 }
 
-fn render_blocks(blocks: &[Block]) -> String {
-    render_table(
-        "block",
-        ["num", "dur", "rf", "gx", "gy", "gz", "adc", "ext"],
-        blocks.iter().map(|b| {
-            [
-                b.id.to_string(),
-                render_dur(&b.dur),
-                id_ref("rf", b.rf),
-                id_ref("grad", b.gx),
-                id_ref("grad", b.gy),
-                id_ref("grad", b.gz),
-                id_ref("adc", b.adc),
-                id_ref("ext-ref", b.ext),
-            ]
-        }),
-    )
+fn populate_blocks(template: &mut Template, blocks: &[Block]) {
+    for block in blocks {
+        template.blocks.rows.push([
+            block.id.to_string(),
+            render_dur(&block.dur),
+            id_ref("rf", block.rf),
+            id_ref("grad", block.gx),
+            id_ref("grad", block.gy),
+            id_ref("grad", block.gz),
+            id_ref("adc", block.adc),
+            id_ref("ext-ref", block.ext),
+        ])
+    }
 }
 
-fn render_rfs(rfs: &[Rf]) -> String {
-    render_table(
-        "rf",
-        [
-            "id",
-            "amp [Hz]",
-            "mag",
-            "phase",
-            "time",
-            "delay [s]",
-            "freq [Hz]",
-            "phase [rad]",
-            "shim",
-        ],
-        rfs.iter().map(|r| {
-            let shim = match r.shim_id {
-                None => "-".to_string(),
-                Some((m, p)) => format!("{}, {}", id_ref("shape", m), id_ref("shape", p)),
-            };
-            [
-                r.id.to_string(),
-                r.amp.to_string(),
-                id_ref("shape", r.mag_id),
-                id_ref("shape", r.phase_id),
-                id_ref("shape", r.time_id),
-                format!("{:.6}", r.delay),
-                r.freq.to_string(),
-                format!("{:.4}", r.phase),
-                shim,
-            ]
-        }),
-    )
+pub fn populate_rfs(template: &mut Template, rfs: &[Rf]) {
+    for rf in rfs {
+        let shim = match rf.shim_id {
+            None => "-".to_string(),
+            Some((m, p)) => format!("{}, {}", id_ref("shape", m), id_ref("shape", p)),
+        };
+
+        template.rfs.rows.push([
+            rf.id.to_string(),
+            rf.amp.to_string(),
+            id_ref("shape", rf.mag_id),
+            id_ref("shape", rf.phase_id),
+            id_ref("shape", rf.time_id),
+            format!("{:.6}", rf.delay),
+            rf.freq.to_string(),
+            format!("{:.4}", rf.phase),
+            shim,
+        ]);
+    }
 }
 
-fn render_gradients(grads: &[Gradient]) -> String {
-    render_table(
-        "grad",
-        ["id", "amp [Hz/m]", "shape", "time", "delay [s]"],
-        grads.iter().map(|g| {
-            [
-                g.id.to_string(),
-                g.amp.to_string(),
-                id_ref("shape", g.shape_id),
-                id_ref("shape", g.time_id),
-                format!("{:.6}", g.delay),
-            ]
-        }),
-    )
+fn populate_gradients(template: &mut Template, grads: &[Gradient]) {
+    for grad in grads {
+        template.gradients.rows.push([
+            grad.id.to_string(),
+            grad.amp.to_string(),
+            id_ref("shape", grad.shape_id),
+            id_ref("shape", grad.time_id),
+            format!("{:.6}", grad.delay),
+        ])
+    }
 }
 
-fn render_traps(traps: &[Trap]) -> String {
+fn populate_traps(template: &mut Template, traps: &[Trap]) {
     // grad/trap share an ID space — block.gx links to "grad-N" either way.
-    render_table(
-        "grad",
-        [
-            "id",
-            "amp [Hz/m]",
-            "rise [s]",
-            "flat [s]",
-            "fall [s]",
-            "delay [s]",
-        ],
-        traps.iter().map(|t| {
-            [
-                t.id.to_string(),
-                t.amp.to_string(),
-                format!("{:.6}", t.rise),
-                format!("{:.6}", t.flat),
-                format!("{:.6}", t.fall),
-                format!("{:.6}", t.delay),
-            ]
-        }),
-    )
+    for trap in traps {
+        template.traps.rows.push([
+            trap.id.to_string(),
+            trap.amp.to_string(),
+            format!("{:.6}", trap.rise),
+            format!("{:.6}", trap.flat),
+            format!("{:.6}", trap.fall),
+            format!("{:.6}", trap.delay),
+        ])
+    }
 }
 
-fn render_adcs(adcs: &[Adc]) -> String {
-    render_table(
-        "adc",
-        [
-            "id",
-            "num",
-            "dwell [s]",
-            "delay [s]",
-            "freq [Hz]",
-            "phase [rad]",
-        ],
-        adcs.iter().map(|a| {
-            [
-                a.id.to_string(),
-                a.num.to_string(),
-                format!("{:.9}", a.dwell),
-                format!("{:.6}", a.delay),
-                a.freq.to_string(),
-                format!("{:.4}", a.phase),
-            ]
-        }),
-    )
+fn populate_adcs(template: &mut Template, adcs: &[Adc]) {
+    for adc in adcs {
+        template.adcs.rows.push([
+            adc.id.to_string(),
+            adc.num.to_string(),
+            format!("{:.9}", adc.dwell),
+            format!("{:.6}", adc.delay),
+            adc.freq.to_string(),
+            format!("{:.4}", adc.phase),
+        ]);
+    }
 }
 
-fn render_delays(delays: &[Delay]) -> String {
-    render_table(
-        "delay",
-        ["id", "delay [s]"],
-        delays
-            .iter()
-            .map(|d| [d.id.to_string(), format!("{:.6}", d.delay)]),
-    )
+fn populate_delays(template: &mut Template, delays: &[Delay]) {
+    for d in delays {
+        template
+            .delays
+            .rows
+            .push([d.id.to_string(), format!("{:.6}", d.delay)]);
+    }
 }
 
-fn render_extensions(ext: &Extensions) -> String {
-    let mut s = if ext.refs.is_empty() {
-        String::from(r#"<p class="empty">(no references)</p>"#)
-    } else {
-        render_table(
-            "ext-ref",
-            ["id", "spec", "obj", "next"],
-            ext.refs.iter().map(|r| {
-                let obj = if r.obj_id == 0 {
-                    "0".to_string()
-                } else {
-                    format!(
-                        r##"<a href="#ext-obj-{}-{}">{}</a>"##,
-                        r.spec_id, r.obj_id, r.obj_id
-                    )
-                };
-                [
-                    r.id.to_string(),
-                    id_ref("ext-spec", r.spec_id),
-                    obj,
-                    id_ref("ext-ref", r.next),
-                ]
-            }),
-        )
-    };
+fn populate_extensions(template: &mut Template, ext: &Extensions) -> String {
+    for ext_ref in &ext.refs {
+        let obj = if ext_ref.obj_id == 0 {
+            "0".to_string()
+        } else {
+            format!(
+                r##"<a href="#ext-obj-{}-{}">{}</a>"##,
+                ext_ref.spec_id, ext_ref.obj_id, ext_ref.obj_id
+            )
+        };
+        template.ext_refs.rows.push([
+            ext_ref.id.to_string(),
+            id_ref("ext-spec", ext_ref.spec_id),
+            obj,
+            id_ref("ext-ref", ext_ref.next),
+        ]);
+    }
 
+    let mut s = String::new();
     for spec in &ext.specs {
-        render_ext_spec(&mut s, spec);
+        populate_ext_spec(&mut s, spec);
     }
     s
 }
 
-fn render_ext_spec(out: &mut String, spec: &ExtensionSpec) {
+fn populate_ext_spec(out: &mut String, spec: &ExtensionSpec) {
     let _ = write!(
         out,
         r#"<h3 id="ext-spec-{id}">#{id} {name}</h3>"#,
