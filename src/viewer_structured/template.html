@@ -77,7 +77,8 @@
     .ext-tag,
     .trap-tag,
     .adc-tag,
-    .free-tag {
+    .free-tag,
+    .rf-tag {
       position: relative;
       cursor: pointer;
     }
@@ -98,16 +99,22 @@
       color: #bf5700;
     }
 
+    .rf-tag {
+      color: #a626a4;
+    }
+
     .ext-tag:hover,
     .trap-tag:hover,
     .adc-tag:hover,
-    .free-tag:hover {
+    .free-tag:hover,
+    .rf-tag:hover {
       text-decoration: underline;
     }
 
     .trap-tag:hover .ext-popup,
     .adc-tag:hover .ext-popup,
-    .free-tag:hover .ext-popup {
+    .free-tag:hover .ext-popup,
+    .rf-tag:hover .ext-popup {
       display: block;
     }
 
@@ -138,7 +145,7 @@
       display: block;
     }
 
-    .grad-plot {
+    .shape-plot {
       width: 480px;
       height: 240px;
     }

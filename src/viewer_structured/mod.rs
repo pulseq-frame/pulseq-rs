@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use pulseq_rs::{Adc, Block, Gradient, Sequence};
+use pulseq_rs::{Adc, Block, Gradient, Rf, Sequence, Shape};
 
 const TEMPLATE: &str = include_str!("template.html");
 
@@ -112,8 +112,8 @@ fn render_sequence(seq: &Sequence, plot_scripts: &mut String) -> String {
 
 fn block_events(block: &Block, plot_scripts: &mut String, counter: &mut u32) -> String {
     let mut tags: Vec<String> = Vec::new();
-    if block.rf.is_some() {
-        tags.push("&lt;RF&gt;".into());
+    if let Some(rf) = &block.rf {
+        tags.push(render_rf_tag(rf, plot_scripts, counter));
     }
     for (axis, grad) in [("GX", &block.gx), ("GY", &block.gy), ("GZ", &block.gz)] {
         if let Some(grad) = grad {
@@ -129,6 +129,61 @@ fn block_events(block: &Block, plot_scripts: &mut String, counter: &mut u32) -> 
     tags.join(" ")
 }
 
+fn render_rf_tag(rf: &Rf, plot_scripts: &mut String, counter: &mut u32) -> String {
+    let mut popup = String::from("<span class='ext-popup'><ul>");
+    let _ = write!(popup, "<li><strong>amp</strong>{} Hz</li>", rf.amp);
+    let _ = write!(popup, "<li><strong>phase</strong>{} rad</li>", rf.phase);
+    let _ = write!(
+        popup,
+        "<li><strong>delay</strong>{}</li>",
+        fmt_seconds(rf.delay)
+    );
+    let _ = write!(popup, "<li><strong>freq</strong>{} Hz</li>", rf.freq);
+    let _ = write!(
+        popup,
+        "<li><strong>amp shape</strong>{}</li>",
+        render_shape_link(&rf.amp_shape, plot_scripts, counter),
+    );
+    let _ = write!(
+        popup,
+        "<li><strong>phase shape</strong>{}</li>",
+        render_shape_link(&rf.phase_shape, plot_scripts, counter),
+    );
+    if let Some((mag, phase)) = &rf.shim_shape {
+        let _ = write!(
+            popup,
+            "<li><strong>shim mag</strong>{}</li>",
+            render_shape_link(mag, plot_scripts, counter),
+        );
+        let _ = write!(
+            popup,
+            "<li><strong>shim phase</strong>{}</li>",
+            render_shape_link(phase, plot_scripts, counter),
+        );
+    }
+    popup.push_str("</ul></span>");
+    format!("<span class='rf-tag'>&lt;RF&gt;{popup}</span>")
+}
+
+fn render_shape_link(shape: &Shape, plot_scripts: &mut String, counter: &mut u32) -> String {
+    let id = *counter;
+    *counter += 1;
+    let _ = writeln!(
+        plot_scripts,
+        "Plotly.newPlot('shape-plot-{id}', \
+          [{{y: {y}, mode: 'lines', line: {{width: 1.2}}}}], \
+          Object.assign({{}}, common, {{width: 480, height: 240, xaxis: {{title: 'sample'}}}}), \
+          {{responsive: false, displaylogo: false, displayModeBar: false}});",
+        y = json_floats(&shape.0),
+    );
+    format!(
+        "<span class='shape-link'>{n} samples\
+          <span class='shape-popup'><div id='shape-plot-{id}' class='shape-plot'></div></span>\
+        </span>",
+        n = shape.0.len(),
+    )
+}
+
 fn render_grad_tag(
     axis: &str,
     grad: &Gradient,
@@ -137,16 +192,6 @@ fn render_grad_tag(
 ) -> String {
     match grad {
         Gradient::Free { amp, delay, shape } => {
-            let id = *counter;
-            *counter += 1;
-            let _ = writeln!(
-                plot_scripts,
-                "Plotly.newPlot('grad-plot-{id}', \
-                  [{{y: {y}, mode: 'lines', line: {{width: 1.2}}}}], \
-                  Object.assign({{}}, common, {{width: 480, height: 240, xaxis: {{title: 'sample'}}}}), \
-                  {{responsive: false, displaylogo: false, displayModeBar: false}});",
-                y = json_floats(&shape.0),
-            );
             let mut popup = String::from("<span class='ext-popup'><ul>");
             let _ = write!(popup, "<li><strong>amp</strong>{amp} Hz/m</li>");
             let _ = write!(
@@ -156,12 +201,8 @@ fn render_grad_tag(
             );
             let _ = write!(
                 popup,
-                "<li><strong>shape</strong>\
-                  <span class='shape-link'>{n} samples\
-                    <span class='shape-popup'><div id='grad-plot-{id}' class='grad-plot'></div></span>\
-                  </span>\
-                </li>",
-                n = shape.0.len(),
+                "<li><strong>shape</strong>{}</li>",
+                render_shape_link(shape, plot_scripts, counter),
             );
             popup.push_str("</ul></span>");
             format!("<span class='free-tag'>&lt;{axis}&gt;{popup}</span>")
