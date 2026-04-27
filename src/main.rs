@@ -1,7 +1,9 @@
+// use std::fmt::Write;
 use std::fmt::Write;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use clap::Parser;
 
 use pulseq_rs::raw::{
@@ -28,39 +30,27 @@ struct Cli {
     open: bool,
 }
 
-fn main() -> Result<(), String> {
+fn main() -> anyhow::Result<()> {
+    // Parse cli parameters and try to read in required input file
     let cli = Cli::parse();
+    let source =
+        fs::read_to_string(&cli.input).context(format!("reading {}", cli.input.display()))?;
 
-    // Resolve output path + default for --open.
-    let (output, open) = match cli.output {
-        Some(path) => (path, cli.open),
-        None => (default_output_path(&cli.input), true),
-    };
-
-    let source = fs::read_to_string(&cli.input)
-        .map_err(|e| format!("failed to read {}: {e}", cli.input.display()))?;
-
-    let sections = pulseq_rs::parse_file(&source).map_err(|e| format!("parse error: {e}"))?;
-
+    let sections = pulseq_rs::parse_file(&source).context("parsing input")?;
     let html = render(&cli.input, &sections);
 
-    fs::write(&output, html).map_err(|e| format!("failed to write {}: {e}", output.display()))?;
+    // Write either to the given output file or to a temporary file for viewing
+    let path = cli.output.clone().unwrap_or_else(|| {
+        std::env::temp_dir().join(format!("pulseq-rs-{}.html", std::process::id()))
+    });
+    std::fs::write(&path, html).context(format!("writing to {}", path.display()))?;
 
-    println!("wrote {}", output.display());
-
-    if open {
-        open::that(&output).map_err(|e| format!("failed to open {}: {e}", output.display()))?;
+    // Open if --open flag was set or if no output file was specified
+    if cli.open || cli.output.is_none() {
+        open::that(&path).context(format!("opening output '{}'", path.display()))?;
     }
 
     Ok(())
-}
-
-fn default_output_path(input: &Path) -> PathBuf {
-    let stem = input
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "pulseq".into());
-    std::env::temp_dir().join(format!("{stem}-{}.html", std::process::id()))
 }
 
 // ---------------------------------------------------------------------------
@@ -152,12 +142,7 @@ fn render_meta(v: Option<&Version>, sig: Option<&Signature>) -> String {
         if !out.is_empty() {
             out.push_str(" &middot; ");
         }
-        let _ = write!(
-            out,
-            "{}: {}",
-            escape(&sig.typ),
-            escape(&sig.hash),
-        );
+        let _ = write!(out, "{}: {}", escape(&sig.typ), escape(&sig.hash),);
     }
     out
 }
@@ -353,7 +338,7 @@ fn render_ext_spec(out: &mut String, spec: &ExtensionSpec) {
         return;
     }
     out.push_str(
-        "<div class=\"table-wrap\"><table><thead><tr>\
+        "<div class=\"table-wrap\"><table class=\"definitions\"><thead><tr>\
          <th>id</th><th>data</th></tr></thead><tbody>",
     );
     for obj in &spec.instances {
