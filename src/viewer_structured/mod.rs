@@ -1,16 +1,20 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use pulseq_rs::{Block, Sequence};
+use pulseq_rs::{Adc, Block, Gradient, Sequence};
 
 const TEMPLATE: &str = include_str!("template.html");
 
 pub fn render(input: &Path, seq: &Sequence) -> String {
+    let mut plot_scripts = String::new();
+    let sequence_html = render_sequence(seq, &mut plot_scripts);
+
     TEMPLATE
         .replace("__TITLE__", &escape(&input.display().to_string()))
         .replace("__META__", &render_meta(seq))
         .replace("__DEFINITIONS__", &render_definitions(seq))
-        .replace("__SEQUENCE__", &render_sequence(seq))
+        .replace("__SEQUENCE__", &sequence_html)
+        .replace("/*__PLOT_SCRIPTS__*/", &plot_scripts)
 }
 
 fn render_meta(seq: &Sequence) -> String {
@@ -86,11 +90,12 @@ fn render_definitions(seq: &Sequence) -> String {
     out
 }
 
-fn render_sequence(seq: &Sequence) -> String {
+fn render_sequence(seq: &Sequence, plot_scripts: &mut String) -> String {
     if seq.blocks.is_empty() {
         return r#"<p class="empty">(no blocks)</p>"#.to_string();
     }
 
+    let mut counter: u32 = 0;
     let mut out = String::from("<table class='sequence'><tbody>");
     for block in &seq.blocks {
         let _ = write!(
@@ -98,34 +103,138 @@ fn render_sequence(seq: &Sequence) -> String {
             "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
             block.id,
             fmt_seconds(block.duration),
-            block_events(block),
+            block_events(block, plot_scripts, &mut counter),
         );
     }
     out.push_str("</tbody></table>");
     out
 }
 
-fn block_events(block: &Block) -> String {
+fn block_events(block: &Block, plot_scripts: &mut String, counter: &mut u32) -> String {
     let mut tags: Vec<String> = Vec::new();
     if block.rf.is_some() {
         tags.push("&lt;RF&gt;".into());
     }
-    if block.gx.is_some() {
-        tags.push("&lt;GX&gt;".into());
+    for (axis, grad) in [("GX", &block.gx), ("GY", &block.gy), ("GZ", &block.gz)] {
+        if let Some(grad) = grad {
+            tags.push(render_grad_tag(axis, grad, plot_scripts, counter));
+        }
     }
-    if block.gy.is_some() {
-        tags.push("&lt;GY&gt;".into());
-    }
-    if block.gz.is_some() {
-        tags.push("&lt;GZ&gt;".into());
-    }
-    if block.adc.is_some() {
-        tags.push("&lt;ADC&gt;".into());
+    if let Some(adc) = &block.adc {
+        tags.push(render_adc_tag(adc));
     }
     if !block.ext.is_empty() {
         tags.push(render_ext_tag(&block.ext));
     }
     tags.join(" ")
+}
+
+fn render_grad_tag(
+    axis: &str,
+    grad: &Gradient,
+    plot_scripts: &mut String,
+    counter: &mut u32,
+) -> String {
+    match grad {
+        Gradient::Free { amp, delay, shape } => {
+            let id = *counter;
+            *counter += 1;
+            let _ = writeln!(
+                plot_scripts,
+                "Plotly.newPlot('grad-plot-{id}', \
+                  [{{y: {y}, mode: 'lines', line: {{width: 1.2}}}}], \
+                  Object.assign({{}}, common, {{width: 480, height: 240, xaxis: {{title: 'sample'}}}}), \
+                  {{responsive: false, displaylogo: false, displayModeBar: false}});",
+                y = json_floats(&shape.0),
+            );
+            let mut popup = String::from("<span class='ext-popup'><ul>");
+            let _ = write!(popup, "<li><strong>amp</strong>{amp} Hz/m</li>");
+            let _ = write!(
+                popup,
+                "<li><strong>delay</strong>{}</li>",
+                fmt_seconds(*delay)
+            );
+            let _ = write!(
+                popup,
+                "<li><strong>shape</strong>\
+                  <span class='shape-link'>{n} samples\
+                    <span class='shape-popup'><div id='grad-plot-{id}' class='grad-plot'></div></span>\
+                  </span>\
+                </li>",
+                n = shape.0.len(),
+            );
+            popup.push_str("</ul></span>");
+            format!("<span class='free-tag'>&lt;{axis}&gt;{popup}</span>")
+        }
+        Gradient::Trap {
+            amp,
+            rise,
+            flat,
+            fall,
+            delay,
+        } => {
+            let mut popup = String::from("<span class='ext-popup'><ul>");
+            let _ = write!(popup, "<li><strong>amp</strong>{amp} Hz/m</li>");
+            let _ = write!(
+                popup,
+                "<li><strong>rise</strong>{}</li>",
+                fmt_seconds(*rise)
+            );
+            let _ = write!(
+                popup,
+                "<li><strong>flat</strong>{}</li>",
+                fmt_seconds(*flat)
+            );
+            let _ = write!(
+                popup,
+                "<li><strong>fall</strong>{}</li>",
+                fmt_seconds(*fall)
+            );
+            let _ = write!(
+                popup,
+                "<li><strong>delay</strong>{}</li>",
+                fmt_seconds(*delay)
+            );
+            popup.push_str("</ul></span>");
+            format!("<span class='trap-tag'>&lt;{axis}&gt;{popup}</span>")
+        }
+    }
+}
+
+fn json_floats(xs: &[f64]) -> String {
+    let mut s = String::with_capacity(xs.len() * 6);
+    s.push('[');
+    for (i, x) in xs.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        if x.is_finite() {
+            let _ = write!(s, "{x}");
+        } else {
+            s.push_str("null");
+        }
+    }
+    s.push(']');
+    s
+}
+
+fn render_adc_tag(adc: &Adc) -> String {
+    let mut popup = String::from("<span class='ext-popup'><ul>");
+    let _ = write!(popup, "<li><strong>num</strong>{}</li>", adc.num);
+    let _ = write!(
+        popup,
+        "<li><strong>dwell</strong>{}</li>",
+        fmt_seconds(adc.dwell)
+    );
+    let _ = write!(
+        popup,
+        "<li><strong>delay</strong>{}</li>",
+        fmt_seconds(adc.delay)
+    );
+    let _ = write!(popup, "<li><strong>freq</strong>{} Hz</li>", adc.freq);
+    let _ = write!(popup, "<li><strong>phase</strong>{} rad</li>", adc.phase);
+    popup.push_str("</ul></span>");
+    format!("<span class='adc-tag'>&lt;ADC&gt;{popup}</span>")
 }
 
 fn render_ext_tag(ext: &[(String, String)]) -> String {

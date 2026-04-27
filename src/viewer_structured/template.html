@@ -4,6 +4,7 @@
 <head>
   <meta charset="utf-8">
   <title>__TITLE__</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
   <style>
     :root {
       color-scheme: light;
@@ -73,14 +74,73 @@
       padding-right: 1.5em;
     }
 
+    .ext-tag,
+    .trap-tag,
+    .adc-tag,
+    .free-tag {
+      position: relative;
+      cursor: pointer;
+    }
+
     .ext-tag {
+      color: #0366d6;
+    }
+
+    .trap-tag {
+      color: #1a7f37;
+    }
+
+    .adc-tag {
+      color: #cf222e;
+    }
+
+    .free-tag {
+      color: #bf5700;
+    }
+
+    .ext-tag:hover,
+    .trap-tag:hover,
+    .adc-tag:hover,
+    .free-tag:hover {
+      text-decoration: underline;
+    }
+
+    .trap-tag:hover .ext-popup,
+    .adc-tag:hover .ext-popup,
+    .free-tag:hover .ext-popup {
+      display: block;
+    }
+
+    .shape-link {
       position: relative;
       color: #0366d6;
       cursor: pointer;
     }
 
-    .ext-tag:hover {
+    .shape-link:hover {
       text-decoration: underline;
+    }
+
+    .shape-popup {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 200;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+      padding: 0.4em;
+    }
+
+    .shape-link:hover .shape-popup {
+      display: block;
+    }
+
+    .grad-plot {
+      width: 480px;
+      height: 240px;
     }
 
     .ext-popup {
@@ -144,6 +204,13 @@
     <h2>Sequence</h2>
     __SEQUENCE__
   </section>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var common = { margin: { t: 10, r: 10, b: 30, l: 40 }, showlegend: false };
+      /*__PLOT_SCRIPTS__*/
+    });
+  </script>
 </body>
 
 </html>
