@@ -1,0 +1,8 @@
+{
+    "rust-analyzer.cargo.features": [
+        "viewer"
+    ],
+    "rust-analyzer.check.features": [
+        "viewer"
+    ],
+}
