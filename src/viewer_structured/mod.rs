@@ -1,7 +1,7 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use pulseq_rs::Sequence;
+use pulseq_rs::{Block, Sequence};
 
 const TEMPLATE: &str = include_str!("template.html");
 
@@ -10,6 +10,7 @@ pub fn render(input: &Path, seq: &Sequence) -> String {
         .replace("__TITLE__", &escape(&input.display().to_string()))
         .replace("__META__", &render_meta(seq))
         .replace("__DEFINITIONS__", &render_definitions(seq))
+        .replace("__SEQUENCE__", &render_sequence(seq))
 }
 
 fn render_meta(seq: &Sequence) -> String {
@@ -85,6 +86,45 @@ fn render_definitions(seq: &Sequence) -> String {
     out
 }
 
+fn render_sequence(seq: &Sequence) -> String {
+    if seq.blocks.is_empty() {
+        return r#"<p class="empty">(no blocks)</p>"#.to_string();
+    }
+
+    let mut out = String::from("<table class='sequence'><tbody>");
+    for block in &seq.blocks {
+        let _ = write!(
+            out,
+            "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+            block.id,
+            fmt_seconds(block.duration),
+            block_events(block),
+        );
+    }
+    out.push_str("</tbody></table>");
+    out
+}
+
+fn block_events(block: &Block) -> String {
+    let mut tags: Vec<&str> = Vec::new();
+    if block.rf.is_some() {
+        tags.push("&lt;RF&gt;");
+    }
+    if block.gx.is_some() {
+        tags.push("&lt;GX&gt;");
+    }
+    if block.gy.is_some() {
+        tags.push("&lt;GY&gt;");
+    }
+    if block.gz.is_some() {
+        tags.push("&lt;GZ&gt;");
+    }
+    if block.adc.is_some() {
+        tags.push("&lt;ADC&gt;");
+    }
+    tags.join(" ")
+}
+
 /// Format a duration in seconds with the largest unit where the value is >= 1.
 fn fmt_seconds(s: f64) -> String {
     if s == 0.0 {
@@ -92,7 +132,7 @@ fn fmt_seconds(s: f64) -> String {
     }
     let a = s.abs();
     let (val, unit) = if a >= 1.0 {
-        (s, "s")
+        (s, " s")
     } else if a >= 1e-3 {
         (s * 1e3, "ms")
     } else if a >= 1e-6 {
@@ -100,7 +140,7 @@ fn fmt_seconds(s: f64) -> String {
     } else {
         (s * 1e9, "ns")
     };
-    format!("{val} {unit}")
+    format!("{val:.1} {unit}")
 }
 
 fn escape(s: &str) -> String {

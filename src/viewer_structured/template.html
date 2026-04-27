@@ -50,6 +50,29 @@
       font-weight: 600;
     }
 
+    table.sequence {
+      border-collapse: collapse;
+      font-size: 0.9em;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    }
+
+    table.sequence td {
+      padding: 0.1em 1em 0.1em 0;
+      vertical-align: top;
+    }
+
+    table.sequence td:first-child {
+      color: #aaa;
+      text-align: right;
+      user-select: none;
+      padding-right: 1.5em;
+    }
+
+    table.sequence td:nth-child(2) {
+      text-align: right;
+      padding-right: 1.5em;
+    }
+
     .meta {
       color: #586069;
       font-size: 0.9em;
@@ -69,6 +92,11 @@
   <section>
     <h2>Definitions</h2>
     __DEFINITIONS__
+  </section>
+
+  <section>
+    <h2>Sequence</h2>
+    __SEQUENCE__
   </section>
 </body>
 
