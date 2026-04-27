@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     hash::Hash,
 };
 
@@ -137,10 +137,16 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         return Err(ConversionError::GradTrapIdReuse);
     }
 
+    // Parse linked lists of extension specs into this form - might change!
+    let exts: HashMap<u32, Vec<(String, String)>> = extract!(sections, Extensions)
+        .into_iter()
+        .flat_map(convert_exts)
+        .collect();
+
     let blocks = extract!(sections, Blocks)
         .into_iter()
         .flatten()
-        .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster))
+        .map(|block| convert_block(block, &rfs, &gradients, &adcs, &delays, &time_raster, &exts))
         .collect::<Result<Vec<Block>, ConversionError>>()?;
 
     Ok(Sequence {
@@ -217,6 +223,49 @@ fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, 
     })
 }
 
+/// Very rough impl just to get something going- values are (ext_name, obj_data)
+fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<(String, String)>> {
+    // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
+    let specs: HashMap<(u32, u32), (String, String)> = exts
+        .specs
+        .iter()
+        .flat_map(|spec| {
+            spec.instances
+                .iter()
+                .map(|obj| ((spec.id, obj.id), (spec.name.clone(), obj.data.clone())))
+        })
+        .collect();
+
+    let refs: HashMap<u32, crate::parse_file::ExtensionRef> =
+        exts.refs.iter().map(|ext| (ext.id, *ext)).collect();
+
+    fn walk_linked_ref_list(
+        refs: &HashMap<u32, parse_file::ExtensionRef>,
+        mut ext_id: u32,
+        specs: &HashMap<(u32, u32), (String, String)>,
+    ) -> Vec<(String, String)> {
+        let mut tmp = Vec::new();
+        // max depth is 50 - hardcoded, maybe should add cycle detector or proper error return val
+        for _ in 0..50 {
+            let ext_ref = &refs[&ext_id];
+            let (name, data) = &specs[&(ext_ref.spec_id, ext_ref.obj_id)];
+            tmp.push((name.clone(), data.clone()));
+
+            ext_id = ext_ref.next;
+            if ext_id == 0 {
+                return tmp;
+            }
+        }
+        panic!("Max extension linked list depth (50) reached")
+    }
+
+    let mut parsed = HashMap::new();
+    for ext_ref in &exts.refs {
+        parsed.insert(ext_ref.id, walk_linked_ref_list(&refs, ext_ref.id, &specs));
+    }
+    parsed
+}
+
 fn convert_block(
     block: crate::parse_file::Block,
     rfs: &HashMap<u32, Arc<Rf>>,
@@ -224,6 +273,7 @@ fn convert_block(
     adcs: &HashMap<u32, Arc<Adc>>,
     delays: &HashMap<u32, f64>,
     time_raster: &TimeRaster,
+    exts: &HashMap<u32, Vec<(String, String)>>,
 ) -> Result<Block, ConversionError> {
     let err = |ty, id| ConversionError::BrokenRef { ty, id };
     use EventType::*;
@@ -266,6 +316,11 @@ fn convert_block(
         }
     };
 
+    // TODO: add Ext event type in error (see code above) to return error instead of unwrapping
+    let ext = (block.ext != 0)
+        .then(|| exts.get(&block.ext).cloned().unwrap())
+        .unwrap_or_default();
+
     Ok(Block {
         id: block.id,
         duration,
@@ -274,6 +329,7 @@ fn convert_block(
         gy,
         gz,
         adc,
+        ext,
     })
 }
 

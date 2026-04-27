@@ -123,6 +123,7 @@ pub struct Block {
     pub gy: Option<Arc<Gradient>>,
     pub gz: Option<Arc<Gradient>>,
     pub adc: Option<Arc<Adc>>,
+    pub ext: Vec<(String, String)>,
 }
 
 pub struct Rf {

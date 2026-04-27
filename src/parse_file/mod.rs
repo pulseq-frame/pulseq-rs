@@ -178,7 +178,7 @@ pub struct Extensions {
     pub specs: Vec<ExtensionSpec>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExtensionRef {
     pub id: u32,
     pub spec_id: u32,

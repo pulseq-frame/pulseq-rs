@@ -73,6 +73,52 @@
       padding-right: 1.5em;
     }
 
+    .ext-tag {
+      position: relative;
+      color: #0366d6;
+      cursor: pointer;
+    }
+
+    .ext-tag:hover {
+      text-decoration: underline;
+    }
+
+    .ext-popup {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 100;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      padding: 0.5em 0.8em;
+      min-width: 180px;
+      max-width: 460px;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 0.85em;
+      color: #222;
+    }
+
+    .ext-tag:hover .ext-popup {
+      display: block;
+    }
+
+    .ext-popup ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .ext-popup li {
+      padding: 0.15em 0;
+    }
+
+    .ext-popup li strong {
+      margin-right: 0.4em;
+    }
+
     .meta {
       color: #586069;
       font-size: 0.9em;

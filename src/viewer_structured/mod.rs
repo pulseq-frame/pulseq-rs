@@ -106,23 +106,40 @@ fn render_sequence(seq: &Sequence) -> String {
 }
 
 fn block_events(block: &Block) -> String {
-    let mut tags: Vec<&str> = Vec::new();
+    let mut tags: Vec<String> = Vec::new();
     if block.rf.is_some() {
-        tags.push("&lt;RF&gt;");
+        tags.push("&lt;RF&gt;".into());
     }
     if block.gx.is_some() {
-        tags.push("&lt;GX&gt;");
+        tags.push("&lt;GX&gt;".into());
     }
     if block.gy.is_some() {
-        tags.push("&lt;GY&gt;");
+        tags.push("&lt;GY&gt;".into());
     }
     if block.gz.is_some() {
-        tags.push("&lt;GZ&gt;");
+        tags.push("&lt;GZ&gt;".into());
     }
     if block.adc.is_some() {
-        tags.push("&lt;ADC&gt;");
+        tags.push("&lt;ADC&gt;".into());
+    }
+    if !block.ext.is_empty() {
+        tags.push(render_ext_tag(&block.ext));
     }
     tags.join(" ")
+}
+
+fn render_ext_tag(ext: &[(String, String)]) -> String {
+    let mut popup = String::from("<span class='ext-popup'><ul>");
+    for (name, data) in ext {
+        let _ = write!(
+            popup,
+            "<li><strong>{}</strong>{}</li>",
+            escape(name),
+            escape(data),
+        );
+    }
+    popup.push_str("</ul></span>");
+    format!("<span class='ext-tag'>&lt;EXT&gt;{popup}</span>")
 }
 
 /// Format a duration in seconds with the largest unit where the value is >= 1.
