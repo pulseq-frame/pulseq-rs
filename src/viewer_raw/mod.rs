@@ -9,7 +9,7 @@ mod template;
 mod util;
 use util::*;
 
-use crate::viewer::template::{ExtSpec, Template};
+use crate::viewer_raw::template::{ExtSpec, Template};
 
 pub fn render(input: &Path, sections: &[Section]) -> String {
     let tmpl = &mut template::Template::new();
