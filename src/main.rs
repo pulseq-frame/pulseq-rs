@@ -147,38 +147,62 @@ fn render_meta(v: Option<&Version>, sig: Option<&Signature>) -> String {
     out
 }
 
-fn render_definitions(defs: &[(String, String)]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table class=\"definitions\"><thead><tr>\
-         <th>key</th><th>value</th></tr></thead><tbody>",
+/// Render a table with sticky headers. The `name` is used both as the table's
+/// CSS class and as the prefix for each row's anchor id (`<tr id="{name}-{col0}">`).
+/// Tables that aren't actually navigated to still get row ids — harmless,
+/// just unused.
+#[allow(unused_must_use)]
+fn render_table<const COLUMNS: usize>(
+    name: &str,
+    column_names: [&str; COLUMNS],
+    rows: impl Iterator<Item = [String; COLUMNS]>,
+) -> String {
+    let mut s = String::new();
+    write!(
+        s,
+        "<div class='table-wrap'><table class='{name}'><thead><tr>"
     );
-    for (k, v) in defs {
-        let _ = write!(s, "<tr><td>{}</td><td>{}</td></tr>", escape(k), escape(v));
+    for col in column_names {
+        write!(s, "<th>{col}</th>");
     }
-    s.push_str("</tbody></table></div>");
+    write!(s, "</tr></thead><tbody>");
+    for row in rows {
+        write!(s, r#"<tr id="{name}-{}">"#, row[0]);
+        for content in &row {
+            write!(s, "<td>{content}</td>");
+        }
+        write!(s, "</tr>");
+    }
+    write!(s, "</tbody></table></div>");
+
     s
 }
 
+fn render_definitions(defs: &[(String, String)]) -> String {
+    render_table(
+        "definitions",
+        ["key", "value"],
+        defs.iter().map(|(k, v)| [escape(k), escape(v)]),
+    )
+}
+
 fn render_blocks(blocks: &[Block]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>num</th><th>dur</th><th>rf</th><th>gx</th><th>gy</th><th>gz</th>\
-         <th>adc</th><th>ext</th></tr></thead><tbody>",
-    );
-    for b in blocks {
-        let _ = write!(s, r#"<tr id="block-{}">"#, b.id);
-        let _ = write!(s, "<td>{}</td>", b.id);
-        let _ = write!(s, "<td>{}</td>", render_dur(&b.dur));
-        let _ = write!(s, "<td>{}</td>", id_ref("rf", b.rf));
-        let _ = write!(s, "<td>{}</td>", id_ref("grad", b.gx));
-        let _ = write!(s, "<td>{}</td>", id_ref("grad", b.gy));
-        let _ = write!(s, "<td>{}</td>", id_ref("grad", b.gz));
-        let _ = write!(s, "<td>{}</td>", id_ref("adc", b.adc));
-        let _ = write!(s, "<td>{}</td>", id_ref("ext-ref", b.ext));
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    render_table(
+        "block",
+        ["num", "dur", "rf", "gx", "gy", "gz", "adc", "ext"],
+        blocks.iter().map(|b| {
+            [
+                b.id.to_string(),
+                render_dur(&b.dur),
+                id_ref("rf", b.rf),
+                id_ref("grad", b.gx),
+                id_ref("grad", b.gy),
+                id_ref("grad", b.gz),
+                id_ref("adc", b.adc),
+                id_ref("ext-ref", b.ext),
+            ]
+        }),
+    )
 }
 
 fn render_dur(d: &BlockDuration) -> String {
@@ -190,135 +214,132 @@ fn render_dur(d: &BlockDuration) -> String {
 }
 
 fn render_rfs(rfs: &[Rf]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>id</th><th>amp [Hz]</th><th>mag</th><th>phase</th><th>time</th>\
-         <th>delay [s]</th><th>freq [Hz]</th><th>phase [rad]</th><th>shim</th>\
-         </tr></thead><tbody>",
-    );
-    for r in rfs {
-        let shim = match r.shim_id {
-            None => "-".to_string(),
-            Some((m, p)) => format!("{}, {}", id_ref("shape", m), id_ref("shape", p)),
-        };
-        let _ = write!(s, r#"<tr id="rf-{}">"#, r.id);
-        let _ = write!(s, "<td>{}</td>", r.id);
-        let _ = write!(s, "<td>{}</td>", r.amp);
-        let _ = write!(s, "<td>{}</td>", id_ref("shape", r.mag_id));
-        let _ = write!(s, "<td>{}</td>", id_ref("shape", r.phase_id));
-        let _ = write!(s, "<td>{}</td>", id_ref("shape", r.time_id));
-        let _ = write!(s, "<td>{:.6}</td>", r.delay);
-        let _ = write!(s, "<td>{}</td>", r.freq);
-        let _ = write!(s, "<td>{:.4}</td>", r.phase);
-        let _ = write!(s, "<td>{shim}</td>");
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    render_table(
+        "rf",
+        [
+            "id",
+            "amp [Hz]",
+            "mag",
+            "phase",
+            "time",
+            "delay [s]",
+            "freq [Hz]",
+            "phase [rad]",
+            "shim",
+        ],
+        rfs.iter().map(|r| {
+            let shim = match r.shim_id {
+                None => "-".to_string(),
+                Some((m, p)) => format!("{}, {}", id_ref("shape", m), id_ref("shape", p)),
+            };
+            [
+                r.id.to_string(),
+                r.amp.to_string(),
+                id_ref("shape", r.mag_id),
+                id_ref("shape", r.phase_id),
+                id_ref("shape", r.time_id),
+                format!("{:.6}", r.delay),
+                r.freq.to_string(),
+                format!("{:.4}", r.phase),
+                shim,
+            ]
+        }),
+    )
 }
 
 fn render_gradients(grads: &[Gradient]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>id</th><th>amp [Hz/m]</th><th>shape</th><th>time</th><th>delay [s]</th>\
-         </tr></thead><tbody>",
-    );
-    for g in grads {
-        let _ = write!(s, r#"<tr id="grad-{}">"#, g.id);
-        let _ = write!(s, "<td>{}</td>", g.id);
-        let _ = write!(s, "<td>{}</td>", g.amp);
-        let _ = write!(s, "<td>{}</td>", id_ref("shape", g.shape_id));
-        let _ = write!(s, "<td>{}</td>", id_ref("shape", g.time_id));
-        let _ = write!(s, "<td>{:.6}</td>", g.delay);
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    render_table(
+        "grad",
+        ["id", "amp [Hz/m]", "shape", "time", "delay [s]"],
+        grads.iter().map(|g| {
+            [
+                g.id.to_string(),
+                g.amp.to_string(),
+                id_ref("shape", g.shape_id),
+                id_ref("shape", g.time_id),
+                format!("{:.6}", g.delay),
+            ]
+        }),
+    )
 }
 
 fn render_traps(traps: &[Trap]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>id</th><th>amp [Hz/m]</th><th>rise [s]</th><th>flat [s]</th><th>fall [s]</th>\
-         <th>delay [s]</th></tr></thead><tbody>",
-    );
-    for t in traps {
-        let _ = write!(s, r#"<tr id="grad-{}">"#, t.id);
-        let _ = write!(s, "<td>{}</td>", t.id);
-        let _ = write!(s, "<td>{}</td>", t.amp);
-        let _ = write!(s, "<td>{:.6}</td>", t.rise);
-        let _ = write!(s, "<td>{:.6}</td>", t.flat);
-        let _ = write!(s, "<td>{:.6}</td>", t.fall);
-        let _ = write!(s, "<td>{:.6}</td>", t.delay);
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    // grad/trap share an ID space — block.gx links to "grad-N" either way.
+    render_table(
+        "grad",
+        [
+            "id",
+            "amp [Hz/m]",
+            "rise [s]",
+            "flat [s]",
+            "fall [s]",
+            "delay [s]",
+        ],
+        traps.iter().map(|t| {
+            [
+                t.id.to_string(),
+                t.amp.to_string(),
+                format!("{:.6}", t.rise),
+                format!("{:.6}", t.flat),
+                format!("{:.6}", t.fall),
+                format!("{:.6}", t.delay),
+            ]
+        }),
+    )
 }
 
 fn render_adcs(adcs: &[Adc]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>id</th><th>num</th><th>dwell [s]</th><th>delay [s]</th>\
-         <th>freq [Hz]</th><th>phase [rad]</th></tr></thead><tbody>",
-    );
-    for a in adcs {
-        let _ = write!(s, r#"<tr id="adc-{}">"#, a.id);
-        let _ = write!(s, "<td>{}</td>", a.id);
-        let _ = write!(s, "<td>{}</td>", a.num);
-        let _ = write!(s, "<td>{:.9}</td>", a.dwell);
-        let _ = write!(s, "<td>{:.6}</td>", a.delay);
-        let _ = write!(s, "<td>{}</td>", a.freq);
-        let _ = write!(s, "<td>{:.4}</td>", a.phase);
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    render_table(
+        "adc",
+        ["id", "num", "dwell [s]", "delay [s]", "freq [Hz]", "phase [rad]"],
+        adcs.iter().map(|a| {
+            [
+                a.id.to_string(),
+                a.num.to_string(),
+                format!("{:.9}", a.dwell),
+                format!("{:.6}", a.delay),
+                a.freq.to_string(),
+                format!("{:.4}", a.phase),
+            ]
+        }),
+    )
 }
 
 fn render_delays(delays: &[Delay]) -> String {
-    let mut s = String::from(
-        "<div class=\"table-wrap\"><table><thead><tr>\
-         <th>id</th><th>delay [s]</th></tr></thead><tbody>",
-    );
-    for d in delays {
-        let _ = write!(s, r#"<tr id="delay-{}">"#, d.id);
-        let _ = write!(s, "<td>{}</td>", d.id);
-        let _ = write!(s, "<td>{:.6}</td>", d.delay);
-        s.push_str("</tr>");
-    }
-    s.push_str("</tbody></table></div>");
-    s
+    render_table(
+        "delay",
+        ["id", "delay [s]"],
+        delays.iter().map(|d| {
+            [d.id.to_string(), format!("{:.6}", d.delay)]
+        }),
+    )
 }
 
 fn render_extensions(ext: &Extensions) -> String {
-    let mut s = String::new();
-
-    if ext.refs.is_empty() {
-        s.push_str(r#"<p class="empty">(no references)</p>"#);
+    let mut s = if ext.refs.is_empty() {
+        String::from(r#"<p class="empty">(no references)</p>"#)
     } else {
-        s.push_str(
-            "<div class=\"table-wrap\"><table><thead><tr>\
-             <th>id</th><th>spec</th><th>obj</th><th>next</th></tr></thead><tbody>",
-        );
-        for r in &ext.refs {
-            let obj = if r.obj_id == 0 {
-                "0".to_string()
-            } else {
-                format!(
-                    r##"<a href="#ext-obj-{}-{}">{}</a>"##,
-                    r.spec_id, r.obj_id, r.obj_id
-                )
-            };
-            let _ = write!(s, r#"<tr id="ext-ref-{}">"#, r.id);
-            let _ = write!(s, "<td>{}</td>", r.id);
-            let _ = write!(s, "<td>{}</td>", id_ref("ext-spec", r.spec_id));
-            let _ = write!(s, "<td>{obj}</td>");
-            let _ = write!(s, "<td>{}</td>", id_ref("ext-ref", r.next));
-            s.push_str("</tr>");
-        }
-        s.push_str("</tbody></table></div>");
-    }
+        render_table(
+            "ext-ref",
+            ["id", "spec", "obj", "next"],
+            ext.refs.iter().map(|r| {
+                let obj = if r.obj_id == 0 {
+                    "0".to_string()
+                } else {
+                    format!(
+                        r##"<a href="#ext-obj-{}-{}">{}</a>"##,
+                        r.spec_id, r.obj_id, r.obj_id
+                    )
+                };
+                [
+                    r.id.to_string(),
+                    id_ref("ext-spec", r.spec_id),
+                    obj,
+                    id_ref("ext-ref", r.next),
+                ]
+            }),
+        )
+    };
 
     for spec in &ext.specs {
         render_ext_spec(&mut s, spec);
@@ -337,20 +358,14 @@ fn render_ext_spec(out: &mut String, spec: &ExtensionSpec) {
         out.push_str(r#"<p class="empty">(no instances)</p>"#);
         return;
     }
-    out.push_str(
-        "<div class=\"table-wrap\"><table class=\"definitions\"><thead><tr>\
-         <th>id</th><th>data</th></tr></thead><tbody>",
-    );
-    for obj in &spec.instances {
-        let _ = write!(
-            out,
-            r#"<tr id="ext-obj-{spec_id}-{id}"><td>{id}</td><td>{data}</td></tr>"#,
-            spec_id = spec.id,
-            id = obj.id,
-            data = escape(&obj.data),
-        );
-    }
-    out.push_str("</tbody></table></div>");
+    let name = format!("ext-obj-{}", spec.id);
+    out.push_str(&render_table(
+        &name,
+        ["id", "data"],
+        spec.instances
+            .iter()
+            .map(|obj| [obj.id.to_string(), escape(&obj.data)]),
+    ));
 }
 
 fn render_shapes(shapes: &[Shape]) -> (String, String) {

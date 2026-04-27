@@ -92,13 +92,16 @@
       width: 1%;
     }
 
-    table.definitions {
+    table.definitions,
+    table[class^="ext-obj-"] {
       font-family: ui-monospace, monospace;
       font-size: 0.9em;
     }
 
     table.definitions th,
-    table.definitions td {
+    table.definitions td,
+    table[class^="ext-obj-"] th,
+    table[class^="ext-obj-"] td {
       text-align: left;
     }
 
