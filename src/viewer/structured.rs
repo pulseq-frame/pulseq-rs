@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use maud::{Markup, PreEscaped, html};
-use pulseq_rs::{Adc, Block, Gradient, Rf, Sequence, Shape};
+use pulseq_rs::{Adc, Block, Extension, Gradient, Rf, Sequence, Shape};
 
 use crate::viewer::{fmt_seconds, json_floats, page};
 
@@ -210,7 +210,13 @@ fn render_grad_tag(axis: &str, grad: &Arc<Gradient>, counters: &mut Counters) ->
                 } }
             }
         },
-        Gradient::Trap { amp, rise, flat, fall, delay } => html! {
+        Gradient::Trap {
+            amp,
+            rise,
+            flat,
+            fall,
+            delay,
+        } => html! {
             span.trap-tag {
                 (format!("<{axis}_{id:02X}>"))
                 span.ext-popup { ul {
@@ -241,16 +247,26 @@ fn render_adc_tag(adc: &Arc<Adc>, counters: &mut Counters) -> Markup {
     }
 }
 
-fn render_ext_tag(ext: &[(String, String)]) -> Markup {
-    html! {
-        span.ext-tag {
-            "<EXT>"
-            span.ext-popup { ul {
-                @for (name, data) in ext {
-                    li { strong { (name) } (data) }
-                }
-            } }
+struct ExtensionRender<'a>(&'a Extension);
+
+#[cfg(feature = "viewer")]
+impl<'a> maud::Render for ExtensionRender<'a> {
+    fn render(&self) -> maud::Markup {
+        match &self.0 {
+            Extension::Unsupported { string_id, data } => maud::html! {
+                li { strong { (string_id) } (data) }
+            },
         }
     }
 }
 
+fn render_ext_tag(ext: &[Extension]) -> Markup {
+    html! {
+        span.ext-tag {
+            "<EXT>"
+            span.ext-popup { ul {
+                @for item in ext { (ExtensionRender(item)) }
+            } }
+        }
+    }
+}

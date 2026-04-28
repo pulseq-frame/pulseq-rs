@@ -137,8 +137,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         return Err(ConversionError::GradTrapIdReuse);
     }
 
-    // Parse linked lists of extension specs into this form - might change!
-    let exts: HashMap<u32, Vec<(String, String)>> = extract!(sections, Extensions)
+    let exts: HashMap<u32, Vec<Extension>> = extract!(sections, Extensions)
         .into_iter()
         .flat_map(convert_exts)
         .collect();
@@ -223,16 +222,23 @@ fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, 
     })
 }
 
+fn parse_ext(string_id: &str, data: &str) -> Extension {
+    Extension::Unsupported {
+        string_id: string_id.to_owned(),
+        data: data.to_owned(),
+    }
+}
+
 /// Very rough impl just to get something going- values are (ext_name, obj_data)
-fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<(String, String)>> {
+fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<Extension>> {
     // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
-    let specs: HashMap<(u32, u32), (String, String)> = exts
+    let specs: HashMap<(u32, u32), Extension> = exts
         .specs
         .iter()
         .flat_map(|spec| {
             spec.instances
                 .iter()
-                .map(|obj| ((spec.id, obj.id), (spec.name.clone(), obj.data.clone())))
+                .map(|obj| ((spec.id, obj.id), parse_ext(&spec.name, &obj.data)))
         })
         .collect();
 
@@ -242,14 +248,13 @@ fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<(String
     fn walk_linked_ref_list(
         refs: &HashMap<u32, parse_file::ExtensionRef>,
         mut ext_id: u32,
-        specs: &HashMap<(u32, u32), (String, String)>,
-    ) -> Vec<(String, String)> {
+        specs: &HashMap<(u32, u32), Extension>,
+    ) -> Vec<Extension> {
         let mut tmp = Vec::new();
         // max depth is 50 - hardcoded, maybe should add cycle detector or proper error return val
         for _ in 0..50 {
             let ext_ref = &refs[&ext_id];
-            let (name, data) = &specs[&(ext_ref.spec_id, ext_ref.obj_id)];
-            tmp.push((name.clone(), data.clone()));
+            tmp.push(specs[&(ext_ref.spec_id, ext_ref.obj_id)].clone());
 
             ext_id = ext_ref.next;
             if ext_id == 0 {
@@ -273,7 +278,7 @@ fn convert_block(
     adcs: &HashMap<u32, Arc<Adc>>,
     delays: &HashMap<u32, f64>,
     time_raster: &TimeRaster,
-    exts: &HashMap<u32, Vec<(String, String)>>,
+    exts: &HashMap<u32, Vec<Extension>>,
 ) -> Result<Block, ConversionError> {
     let err = |ty, id| ConversionError::BrokenRef { ty, id };
     use EventType::*;

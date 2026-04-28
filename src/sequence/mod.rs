@@ -123,7 +123,12 @@ pub struct Block {
     pub gy: Option<Arc<Gradient>>,
     pub gz: Option<Arc<Gradient>>,
     pub adc: Option<Arc<Adc>>,
-    pub ext: Vec<(String, String)>,
+    pub ext: Vec<Extension>,
+}
+
+#[derive(Clone)]
+pub enum Extension {
+    Unsupported { string_id: String, data: String },
 }
 
 pub struct Rf {
