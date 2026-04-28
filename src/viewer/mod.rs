@@ -6,6 +6,9 @@ use std::fmt::Write;
 
 use maud::{DOCTYPE, Markup, PreEscaped, html};
 
+pub mod raw;
+pub mod structured;
+
 const VIEWER_CSS: &str = include_str!("viewer.css");
 const VIEWER_JS: &str = include_str!("viewer.js");
 
@@ -15,7 +18,7 @@ const VIEWER_JS: &str = include_str!("viewer.js");
 /// assignments for structured, per-shape Plotly.newPlot calls for raw); it is
 /// emitted as a `<script>` block *before* the shared viewer.js so its globals
 /// are visible when viewer.js's DOMContentLoaded handler runs.
-pub fn page(title: &str, body_class: &str, body: Markup, inline_script: Markup) -> String {
+fn page(title: &str, body_class: &str, body: Markup, inline_script: Markup) -> String {
     let doc = html! {
         (DOCTYPE)
         html lang="en" {
@@ -35,12 +38,12 @@ pub fn page(title: &str, body_class: &str, body: Markup, inline_script: Markup) 
     doc.into_string()
 }
 
-pub fn empty_section() -> Markup {
+fn empty_section() -> Markup {
     html! { p.empty { "(not present)" } }
 }
 
 /// Format a duration in seconds with the largest unit where the value is >= 1.
-pub fn fmt_seconds(s: f64) -> String {
+fn fmt_seconds(s: f64) -> String {
     if s == 0.0 {
         return "0".to_string();
     }
@@ -57,7 +60,7 @@ pub fn fmt_seconds(s: f64) -> String {
     format!("{val:.1} {unit}")
 }
 
-pub fn json_floats(xs: &[f64]) -> String {
+fn json_floats(xs: &[f64]) -> String {
     let mut s = String::with_capacity(xs.len() * 6);
     s.push('[');
     for (i, x) in xs.iter().enumerate() {

@@ -6,8 +6,6 @@ use clap::Parser;
 use pulseq_rs::Sequence;
 
 mod viewer;
-mod viewer_raw;
-mod viewer_structured;
 
 /// Parse a pulseq .seq file and render it as a standalone HTML viewer.
 #[derive(Parser)]
@@ -43,13 +41,13 @@ fn main() -> anyhow::Result<()> {
     let sections = pulseq_rs::parse_file(&source).context("parsing input")?;
 
     if !cli.no_raw {
-        let html = viewer_raw::render(&cli.input, &sections);
+        let html = viewer::raw::render(&cli.input, &sections);
         write_and_maybe_open(&cli, "raw", &html)?;
     }
 
     if !cli.no_structured {
         let seq = Sequence::from_parsed_file(sections).context("converting sections to sequence")?;
-        let html = viewer_structured::render(&cli.input, &seq);
+        let html = viewer::structured::render(&cli.input, &seq);
         write_and_maybe_open(&cli, "structured", &html)?;
     }
 
