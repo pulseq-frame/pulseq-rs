@@ -83,24 +83,24 @@
       cursor: pointer;
     }
 
-    .ext-tag {
-      color: #0366d6;
-    }
-
-    .trap-tag {
-      color: #1a7f37;
+    .rf-tag {
+      color: #3498db;
     }
 
     .adc-tag {
-      color: #cf222e;
+      color: #e74c3c;
+    }
+
+    .trap-tag {
+      color: #f1c40f;
     }
 
     .free-tag {
-      color: #bf5700;
+      color: #e67e22;
     }
 
-    .rf-tag {
-      color: #a626a4;
+    .ext-tag {
+      color: #2ecc71;
     }
 
     .ext-tag:hover,
@@ -212,10 +212,48 @@
     __SEQUENCE__
   </section>
 
+  <div id="shape-registry" style="display:none">
+    __SHAPE_DIVS__
+  </div>
+
   <script>
+    var shapes = {};
+    /*__SHAPE_DATA__*/
     document.addEventListener('DOMContentLoaded', function () {
-      var common = { margin: { t: 10, r: 10, b: 30, l: 40 }, showlegend: false };
-      /*__PLOT_SCRIPTS__*/
+      var layout = {
+        margin: { t: 10, r: 10, b: 30, l: 40 },
+        showlegend: false,
+        width: 480,
+        height: 240,
+        xaxis: { title: 'sample' }
+      };
+      var config = { responsive: false, displaylogo: false, displayModeBar: false };
+      var registry = document.getElementById('shape-registry');
+
+      function ensurePlotted(plotDiv, shapeId) {
+        if (!plotDiv.dataset.rendered) {
+          Plotly.newPlot(
+            plotDiv,
+            [{ y: shapes[shapeId], mode: 'lines', line: { width: 1.2 } }],
+            layout,
+            config
+          );
+          plotDiv.dataset.rendered = '1';
+        }
+      }
+
+      document.querySelectorAll('.shape-link').forEach(function (link) {
+        var shapeId = link.dataset.shape;
+        var plotDiv = document.getElementById('shape-plot-' + shapeId);
+        var popup = link.querySelector('.shape-popup');
+        link.addEventListener('mouseenter', function () {
+          popup.appendChild(plotDiv);
+          ensurePlotted(plotDiv, shapeId);
+        });
+        link.addEventListener('mouseleave', function () {
+          registry.appendChild(plotDiv);
+        });
+      });
     });
   </script>
 </body>

@@ -1,20 +1,70 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::Path;
+use std::sync::Arc;
 
 use pulseq_rs::{Adc, Block, Gradient, Rf, Sequence, Shape};
+
+/// Per-type identity counters. Each unique `Arc<T>` (compared by pointer) gets
+/// a stable id assigned the first time we see it; subsequent occurrences reuse
+/// the same id. Display ids are 1-indexed.
+///
+/// `shape_data` collects `shapes[id] = [...]` JS assignments and `shape_divs`
+/// collects `<div id='shape-plot-id'></div>` placeholders — one of each per
+/// unique shape. JS later moves these divs into popups on hover and renders
+/// the Plotly chart lazily.
+#[derive(Default)]
+struct Counters {
+    rf: HashMap<*const Rf, u32>,
+    grad: HashMap<*const Gradient, u32>,
+    adc: HashMap<*const Adc, u32>,
+    shape: HashMap<*const Shape, u32>,
+    shape_data: String,
+    shape_divs: String,
+}
+
+impl Counters {
+    fn rf(&mut self, x: &Arc<Rf>) -> u32 {
+        let next = self.rf.len() as u32 + 1;
+        *self.rf.entry(Arc::as_ptr(x)).or_insert(next)
+    }
+    fn grad(&mut self, x: &Arc<Gradient>) -> u32 {
+        let next = self.grad.len() as u32 + 1;
+        *self.grad.entry(Arc::as_ptr(x)).or_insert(next)
+    }
+    fn adc(&mut self, x: &Arc<Adc>) -> u32 {
+        let next = self.adc.len() as u32 + 1;
+        *self.adc.entry(Arc::as_ptr(x)).or_insert(next)
+    }
+    /// Assign / look up a shape's display id; on first sight, emit its sample
+    /// array and a placeholder `<div>` for the chart. Subsequent calls just
+    /// return the existing id.
+    fn shape(&mut self, x: &Arc<Shape>) -> u32 {
+        let ptr = Arc::as_ptr(x);
+        if let Some(&existing) = self.shape.get(&ptr) {
+            return existing;
+        }
+        let id = self.shape.len() as u32 + 1;
+        self.shape.insert(ptr, id);
+        let _ = writeln!(self.shape_data, "shapes[{id}] = {};", json_floats(&x.0));
+        let _ = writeln!(self.shape_divs, "<div id='shape-plot-{id}'></div>");
+        id
+    }
+}
 
 const TEMPLATE: &str = include_str!("template.html");
 
 pub fn render(input: &Path, seq: &Sequence) -> String {
-    let mut plot_scripts = String::new();
-    let sequence_html = render_sequence(seq, &mut plot_scripts);
+    let mut counters = Counters::default();
+    let sequence_html = render_sequence(seq, &mut counters);
 
     TEMPLATE
         .replace("__TITLE__", &escape(&input.display().to_string()))
         .replace("__META__", &render_meta(seq))
         .replace("__DEFINITIONS__", &render_definitions(seq))
         .replace("__SEQUENCE__", &sequence_html)
-        .replace("/*__PLOT_SCRIPTS__*/", &plot_scripts)
+        .replace("/*__SHAPE_DATA__*/", &counters.shape_data)
+        .replace("__SHAPE_DIVS__", &counters.shape_divs)
 }
 
 fn render_meta(seq: &Sequence) -> String {
@@ -90,12 +140,11 @@ fn render_definitions(seq: &Sequence) -> String {
     out
 }
 
-fn render_sequence(seq: &Sequence, plot_scripts: &mut String) -> String {
+fn render_sequence(seq: &Sequence, counters: &mut Counters) -> String {
     if seq.blocks.is_empty() {
         return r#"<p class="empty">(no blocks)</p>"#.to_string();
     }
 
-    let mut counter: u32 = 0;
     let mut out = String::from("<table class='sequence'><tbody>");
     for block in &seq.blocks {
         let _ = write!(
@@ -103,25 +152,25 @@ fn render_sequence(seq: &Sequence, plot_scripts: &mut String) -> String {
             "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
             block.id,
             fmt_seconds(block.duration),
-            block_events(block, plot_scripts, &mut counter),
+            block_events(block, counters),
         );
     }
     out.push_str("</tbody></table>");
     out
 }
 
-fn block_events(block: &Block, plot_scripts: &mut String, counter: &mut u32) -> String {
+fn block_events(block: &Block, counters: &mut Counters) -> String {
     let mut tags: Vec<String> = Vec::new();
     if let Some(rf) = &block.rf {
-        tags.push(render_rf_tag(rf, plot_scripts, counter));
+        tags.push(render_rf_tag(rf, counters));
     }
     for (axis, grad) in [("GX", &block.gx), ("GY", &block.gy), ("GZ", &block.gz)] {
         if let Some(grad) = grad {
-            tags.push(render_grad_tag(axis, grad, plot_scripts, counter));
+            tags.push(render_grad_tag(axis, grad, counters));
         }
     }
     if let Some(adc) = &block.adc {
-        tags.push(render_adc_tag(adc));
+        tags.push(render_adc_tag(adc, counters));
     }
     if !block.ext.is_empty() {
         tags.push(render_ext_tag(&block.ext));
@@ -129,7 +178,8 @@ fn block_events(block: &Block, plot_scripts: &mut String, counter: &mut u32) -> 
     tags.join(" ")
 }
 
-fn render_rf_tag(rf: &Rf, plot_scripts: &mut String, counter: &mut u32) -> String {
+fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> String {
+    let id = counters.rf(rf);
     let mut popup = String::from("<span class='ext-popup'><ul>");
     let _ = write!(popup, "<li><strong>amp</strong>{} Hz</li>", rf.amp);
     let _ = write!(popup, "<li><strong>phase</strong>{} rad</li>", rf.phase);
@@ -142,55 +192,42 @@ fn render_rf_tag(rf: &Rf, plot_scripts: &mut String, counter: &mut u32) -> Strin
     let _ = write!(
         popup,
         "<li><strong>amp shape</strong>{}</li>",
-        render_shape_link(&rf.amp_shape, plot_scripts, counter),
+        render_shape_link(&rf.amp_shape, counters),
     );
     let _ = write!(
         popup,
         "<li><strong>phase shape</strong>{}</li>",
-        render_shape_link(&rf.phase_shape, plot_scripts, counter),
+        render_shape_link(&rf.phase_shape, counters),
     );
     if let Some((mag, phase)) = &rf.shim_shape {
         let _ = write!(
             popup,
             "<li><strong>shim mag</strong>{}</li>",
-            render_shape_link(mag, plot_scripts, counter),
+            render_shape_link(mag, counters),
         );
         let _ = write!(
             popup,
             "<li><strong>shim phase</strong>{}</li>",
-            render_shape_link(phase, plot_scripts, counter),
+            render_shape_link(phase, counters),
         );
     }
     popup.push_str("</ul></span>");
-    format!("<span class='rf-tag'>&lt;RF&gt;{popup}</span>")
+    format!("<span class='rf-tag'>&lt;RF_{id:02X}&gt;{popup}</span>")
 }
 
-fn render_shape_link(shape: &Shape, plot_scripts: &mut String, counter: &mut u32) -> String {
-    let id = *counter;
-    *counter += 1;
-    let _ = writeln!(
-        plot_scripts,
-        "Plotly.newPlot('shape-plot-{id}', \
-          [{{y: {y}, mode: 'lines', line: {{width: 1.2}}}}], \
-          Object.assign({{}}, common, {{width: 480, height: 240, xaxis: {{title: 'sample'}}}}), \
-          {{responsive: false, displaylogo: false, displayModeBar: false}});",
-        y = json_floats(&shape.0),
-    );
+fn render_shape_link(shape: &Arc<Shape>, counters: &mut Counters) -> String {
+    let id = counters.shape(shape);
     format!(
-        "<span class='shape-link'>{n} samples\
-          <span class='shape-popup'><div id='shape-plot-{id}' class='shape-plot'></div></span>\
+        "<span class='shape-link' data-shape='{id}'>shape {id:02x} ({n} samples)\
+          <span class='shape-popup'></span>\
         </span>",
         n = shape.0.len(),
     )
 }
 
-fn render_grad_tag(
-    axis: &str,
-    grad: &Gradient,
-    plot_scripts: &mut String,
-    counter: &mut u32,
-) -> String {
-    match grad {
+fn render_grad_tag(axis: &str, grad: &Arc<Gradient>, counters: &mut Counters) -> String {
+    let id = counters.grad(grad);
+    match grad.as_ref() {
         Gradient::Free { amp, delay, shape } => {
             let mut popup = String::from("<span class='ext-popup'><ul>");
             let _ = write!(popup, "<li><strong>amp</strong>{amp} Hz/m</li>");
@@ -202,10 +239,10 @@ fn render_grad_tag(
             let _ = write!(
                 popup,
                 "<li><strong>shape</strong>{}</li>",
-                render_shape_link(shape, plot_scripts, counter),
+                render_shape_link(shape, counters),
             );
             popup.push_str("</ul></span>");
-            format!("<span class='free-tag'>&lt;{axis}&gt;{popup}</span>")
+            format!("<span class='free-tag'>&lt;{axis}_{id:02X}&gt;{popup}</span>")
         }
         Gradient::Trap {
             amp,
@@ -237,7 +274,7 @@ fn render_grad_tag(
                 fmt_seconds(*delay)
             );
             popup.push_str("</ul></span>");
-            format!("<span class='trap-tag'>&lt;{axis}&gt;{popup}</span>")
+            format!("<span class='trap-tag'>&lt;{axis}_{id:02X}&gt;{popup}</span>")
         }
     }
 }
@@ -259,7 +296,8 @@ fn json_floats(xs: &[f64]) -> String {
     s
 }
 
-fn render_adc_tag(adc: &Adc) -> String {
+fn render_adc_tag(adc: &Arc<Adc>, counters: &mut Counters) -> String {
+    let id = counters.adc(adc);
     let mut popup = String::from("<span class='ext-popup'><ul>");
     let _ = write!(popup, "<li><strong>num</strong>{}</li>", adc.num);
     let _ = write!(
@@ -275,7 +313,7 @@ fn render_adc_tag(adc: &Adc) -> String {
     let _ = write!(popup, "<li><strong>freq</strong>{} Hz</li>", adc.freq);
     let _ = write!(popup, "<li><strong>phase</strong>{} rad</li>", adc.phase);
     popup.push_str("</ul></span>");
-    format!("<span class='adc-tag'>&lt;ADC&gt;{popup}</span>")
+    format!("<span class='adc-tag'>&lt;ADC_{id:02X}&gt;{popup}</span>")
 }
 
 fn render_ext_tag(ext: &[(String, String)]) -> String {
