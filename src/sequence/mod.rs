@@ -7,7 +7,9 @@ use crate::{
 };
 
 mod display;
+pub mod extensions;
 pub mod from_raw;
+pub use extensions::Extension;
 
 pub struct Sequence {
     pub time_raster: TimeRaster,
@@ -124,11 +126,6 @@ pub struct Block {
     pub gz: Option<Arc<Gradient>>,
     pub adc: Option<Arc<Adc>>,
     pub ext: Vec<Extension>,
-}
-
-#[derive(Clone)]
-pub enum Extension {
-    Unsupported { string_id: String, data: String },
 }
 
 pub struct Rf {

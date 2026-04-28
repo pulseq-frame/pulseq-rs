@@ -222,13 +222,6 @@ fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, 
     })
 }
 
-fn parse_ext(string_id: &str, data: &str) -> Extension {
-    Extension::Unsupported {
-        string_id: string_id.to_owned(),
-        data: data.to_owned(),
-    }
-}
-
 /// Very rough impl just to get something going- values are (ext_name, obj_data)
 fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<Extension>> {
     // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
@@ -238,7 +231,7 @@ fn convert_exts(exts: crate::parse_file::Extensions) -> HashMap<u32, Vec<Extensi
         .flat_map(|spec| {
             spec.instances
                 .iter()
-                .map(|obj| ((spec.id, obj.id), parse_ext(&spec.name, &obj.data)))
+                .map(|obj| ((spec.id, obj.id), Extension::parse(&spec.name, &obj.data)))
         })
         .collect();
 

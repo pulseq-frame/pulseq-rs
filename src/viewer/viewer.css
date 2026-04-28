@@ -281,3 +281,8 @@ table.sequence td:nth-child(2) {
 .ext-popup li strong {
   margin-right: 0.4em;
 }
+
+.ext-popup li .ext-unsupported {
+  color: #888;
+  margin-right: 0.4em;
+}
