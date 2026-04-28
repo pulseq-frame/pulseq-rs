@@ -262,6 +262,13 @@ impl<'a> maud::Render for ExtensionRender<'a> {
             Extension::LabelInc { counter, value } => maud::html! {
                 li { strong { "LABELINC" } code { (counter) " += " (value) } }
             },
+            Extension::Trigger { typ, channel, delay, duration } => maud::html! {
+                li { strong { "TRIGGER" } code {
+                    "type=" (typ) ", channel=" (channel)
+                    ", delay=" (fmt_seconds(*delay))
+                    ", duration=" (fmt_seconds(*duration))
+                } }
+            },
         }
     }
 }

@@ -11,6 +11,15 @@ pub enum Extension {
         counter: ExtLabelCounter,
         value: i32,
     },
+    /// Siemens specific extension for triggering on external channels.
+    /// `typ` and `channel` are raw vendor-specific numbers; `delay` and
+    /// `duration` are stored in seconds (parsed from microseconds in the file).
+    Trigger {
+        typ: u32,
+        channel: u32,
+        delay: f64,
+        duration: f64,
+    },
 }
 
 impl Extension {
@@ -18,6 +27,7 @@ impl Extension {
         match string_id.to_lowercase().as_str() {
             "labelset" => parse_labelset(data),
             "labelinc" => parse_labelinc(data),
+            "triggers" => parse_trigger(data),
             _ => Self::Unsupported {
                 string_id: string_id.to_owned(),
                 data: data.to_owned(),
@@ -74,6 +84,21 @@ fn parse_labelinc(data: &str) -> Extension {
     };
 
     Extension::LabelInc { counter, value }
+}
+
+fn parse_trigger(data: &str) -> Extension {
+    let parts: [&str; 4] = data
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("trigger extension expects 4 numbers");
+
+    Extension::Trigger {
+        typ: parts[0].parse().unwrap(),
+        channel: parts[1].parse().unwrap(),
+        delay: parts[2].parse::<f64>().unwrap() * 1e-6,
+        duration: parts[3].parse::<f64>().unwrap() * 1e-6,
+    }
 }
 
 /// Labels and their descriptions taken from pypulseq - unknown labels throw an error.
