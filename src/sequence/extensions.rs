@@ -20,6 +20,14 @@ pub enum Extension {
         delay: f64,
         duration: f64,
     },
+    /// Soft Delay extension (new since pulseq 1.5). Compute delays based on
+    /// scanner special card inputs.
+    Delay {
+        numeric_id: u32,
+        text_id: String,
+        t_offset: f64,
+        t_factor: f64,
+    }
 }
 
 impl Extension {
@@ -28,6 +36,7 @@ impl Extension {
             "labelset" => parse_labelset(data),
             "labelinc" => parse_labelinc(data),
             "triggers" => parse_trigger(data),
+            "delays" => parse_delay(data),
             _ => Self::Unsupported {
                 string_id: string_id.to_owned(),
                 data: data.to_owned(),
@@ -98,6 +107,21 @@ fn parse_trigger(data: &str) -> Extension {
         channel: parts[1].parse().unwrap(),
         delay: parts[2].parse::<f64>().unwrap() * 1e-6,
         duration: parts[3].parse::<f64>().unwrap() * 1e-6,
+    }
+}
+
+fn parse_delay(data: &str) -> Extension {
+    let parts: [&str; 4] = data
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("delay extension expects 4 fields: numeric_id t_offset t_factor text_id");
+
+    Extension::Delay {
+        numeric_id: parts[0].parse().unwrap(),
+        t_offset: parts[1].parse::<f64>().unwrap() * 1e-6,
+        t_factor: 1.0 / parts[2].parse::<f64>().unwrap(),
+        text_id: parts[3].to_owned(),
     }
 }
 

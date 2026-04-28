@@ -269,6 +269,13 @@ impl<'a> maud::Render for ExtensionRender<'a> {
                     ", duration=" (fmt_seconds(*duration))
                 } }
             },
+            Extension::Delay { numeric_id, text_id, t_offset, t_factor } => maud::html! {
+                li { strong { "DELAY" } code {
+                    "#" (numeric_id) " \"" (text_id) "\""
+                    ", offset=" (fmt_seconds(*t_offset))
+                    ", factor=" (t_factor)
+                } }
+            },
         }
     }
 }
