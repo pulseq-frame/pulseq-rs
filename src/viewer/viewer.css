@@ -286,3 +286,8 @@ table.sequence td:nth-child(2) {
   color: #888;
   margin-right: 0.4em;
 }
+
+.ext-popup li code {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 1em;
+}

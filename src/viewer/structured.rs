@@ -254,7 +254,7 @@ impl<'a> maud::Render for ExtensionRender<'a> {
     fn render(&self) -> maud::Markup {
         match &self.0 {
             Extension::Unsupported { string_id, data } => maud::html! {
-                li { em.ext-unsupported { "\"" (string_id) "\"" } (data) }
+                li { em.ext-unsupported { (string_id) } code { (data) } }
             },
             Extension::LabelSet { flag, value } => maud::html! {
                 li { strong { "LABELSET" } code { (flag) " = " (value) } }
