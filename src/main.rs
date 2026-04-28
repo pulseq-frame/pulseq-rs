@@ -5,6 +5,7 @@ use anyhow::Context;
 use clap::Parser;
 use pulseq_rs::Sequence;
 
+mod viewer;
 mod viewer_raw;
 mod viewer_structured;
 

@@ -1,210 +1,330 @@
-use std::fmt::Write;
 use std::path::Path;
 
-use pulseq_rs::raw::{
-    Adc, Block, Delay, Extensions, Gradient, Rf, Section, Shape, Signature, Trap, Version,
-};
+use maud::{Markup, PreEscaped, html};
+use pulseq_rs::raw::{BlockDuration, Extensions, Section, Shape, Signature, Version};
 
-mod template;
-mod util;
-use util::*;
-
-use crate::viewer_raw::template::{ExtSpec, Template};
+use crate::viewer::{empty_section, json_floats, page};
 
 pub fn render(input: &Path, sections: &[Section]) -> String {
-    let tmpl = &mut template::Template::new();
+    let title = input.display().to_string();
     let mut version: Option<&Version> = None;
     let mut signature: Option<&Signature> = None;
+
+    let mut definitions: Vec<(String, [Markup; 2])> = Vec::new();
+    let mut blocks: Vec<(String, [Markup; 8])> = Vec::new();
+    let mut rfs: Vec<(String, [Markup; 9])> = Vec::new();
+    let mut gradients: Vec<(String, [Markup; 5])> = Vec::new();
+    let mut traps: Vec<(String, [Markup; 6])> = Vec::new();
+    let mut adcs: Vec<(String, [Markup; 6])> = Vec::new();
+    let mut delays: Vec<(String, [Markup; 2])> = Vec::new();
+    let mut ext_refs: Vec<(String, [Markup; 4])> = Vec::new();
+    let mut ext_specs: Vec<ExtSpec> = Vec::new();
+    let mut shapes: &[Shape] = &[];
 
     for section in sections {
         match section {
             Section::Version(v) => version = Some(v),
-            Section::Signature(sig) => signature = Some(sig),
-            Section::Definitions(d) => populate_definitions(tmpl, d),
-            Section::Blocks(b) => populate_blocks(tmpl, b),
-            Section::Rfs(r) => populate_rfs(tmpl, r),
-            Section::Gradients(g) => populate_gradients(tmpl, g),
-            Section::Traps(t) => populate_traps(tmpl, t),
-            Section::Adcs(a) => populate_adcs(tmpl, a),
-            Section::Delays(d) => populate_delays(tmpl, d),
-            Section::Extensions(e) => populate_extensions(tmpl, e),
-            Section::Shapes(sh) => populate_shapes(tmpl, sh),
+            Section::Signature(s) => signature = Some(s),
+            Section::Definitions(d) => {
+                for (k, v) in d {
+                    definitions.push((k.clone(), [text(k), text(v)]));
+                }
+            }
+            Section::Blocks(bs) => {
+                for b in bs {
+                    blocks.push((
+                        b.id.to_string(),
+                        [
+                            text(b.id.to_string()),
+                            render_dur(&b.dur),
+                            id_ref("rf", b.rf),
+                            id_ref("grad", b.gx),
+                            id_ref("grad", b.gy),
+                            id_ref("grad", b.gz),
+                            id_ref("adc", b.adc),
+                            id_ref("ext-ref", b.ext),
+                        ],
+                    ));
+                }
+            }
+            Section::Rfs(rs) => {
+                for rf in rs {
+                    let shim = match rf.shim_id {
+                        None => text("-"),
+                        Some((m, p)) => html! {
+                            (id_ref("shape", m)) ", " (id_ref("shape", p))
+                        },
+                    };
+                    rfs.push((
+                        rf.id.to_string(),
+                        [
+                            text(rf.id.to_string()),
+                            text(rf.amp.to_string()),
+                            id_ref("shape", rf.mag_id),
+                            id_ref("shape", rf.phase_id),
+                            id_ref("shape", rf.time_id),
+                            text(format!("{:.6}", rf.delay)),
+                            text(rf.freq.to_string()),
+                            text(format!("{:.4}", rf.phase)),
+                            shim,
+                        ],
+                    ));
+                }
+            }
+            Section::Gradients(gs) => {
+                for g in gs {
+                    gradients.push((
+                        g.id.to_string(),
+                        [
+                            text(g.id.to_string()),
+                            text(g.amp.to_string()),
+                            id_ref("shape", g.shape_id),
+                            id_ref("shape", g.time_id),
+                            text(format!("{:.6}", g.delay)),
+                        ],
+                    ));
+                }
+            }
+            Section::Traps(ts) => {
+                // grad/trap share an ID space — block.gx links to "grad-N" either way.
+                for t in ts {
+                    traps.push((
+                        t.id.to_string(),
+                        [
+                            text(t.id.to_string()),
+                            text(t.amp.to_string()),
+                            text(format!("{:.6}", t.rise)),
+                            text(format!("{:.6}", t.flat)),
+                            text(format!("{:.6}", t.fall)),
+                            text(format!("{:.6}", t.delay)),
+                        ],
+                    ));
+                }
+            }
+            Section::Adcs(adcs_in) => {
+                for a in adcs_in {
+                    adcs.push((
+                        a.id.to_string(),
+                        [
+                            text(a.id.to_string()),
+                            text(a.num.to_string()),
+                            text(format!("{:.9}", a.dwell)),
+                            text(format!("{:.6}", a.delay)),
+                            text(a.freq.to_string()),
+                            text(format!("{:.4}", a.phase)),
+                        ],
+                    ));
+                }
+            }
+            Section::Delays(ds) => {
+                for d in ds {
+                    delays.push((
+                        d.id.to_string(),
+                        [text(d.id.to_string()), text(format!("{:.6}", d.delay))],
+                    ));
+                }
+            }
+            Section::Extensions(e) => populate_extensions(&mut ext_refs, &mut ext_specs, e),
+            Section::Shapes(sh) => shapes = sh,
         }
     }
-    // The pulseq parser expects a version section - we don't even get here if its missing
-    tmpl.meta = render_meta(
-        version.expect("version section (parsing fails without)"),
-        signature,
-    );
 
-    tmpl.render(input)
+    let body = html! {
+        nav {
+            a href="#definitions" { "Definitions" }
+            a href="#blocks" { "Blocks" }
+            a href="#rfs" { "RF" }
+            a href="#gradients" { "Gradients" }
+            a href="#traps" { "Traps" }
+            a href="#adcs" { "ADC" }
+            a href="#delays" { "Delays" }
+            a href="#extensions" { "Extensions" }
+            a href="#shapes" { "Shapes" }
+        }
+
+        h1 { (title) }
+        p.meta { (render_meta(version.expect("version section (parsing fails without)"), signature)) }
+
+        section id="definitions" { h2 { "Definitions" } (table("definitions", ["key", "value"], &definitions)) }
+        section id="blocks" { h2 { "Blocks" }
+            (table("block", ["num", "dur", "rf", "gx", "gy", "gz", "adc", "ext"], &blocks))
+        }
+        section id="rfs" { h2 { "RF events" }
+            (table(
+                "rf",
+                ["id", "amp [Hz]", "mag", "phase", "time", "delay [s]", "freq [Hz]", "phase [rad]", "shim"],
+                &rfs,
+            ))
+        }
+        section id="gradients" { h2 { "Arbitrary gradients" }
+            (table("grad", ["id", "amp [Hz/m]", "shape", "time", "delay [s]"], &gradients))
+        }
+        section id="traps" { h2 { "Trapezoidal gradients" }
+            (table(
+                "grad",
+                ["id", "amp [Hz/m]", "rise [s]", "flat [s]", "fall [s]", "delay [s]"],
+                &traps,
+            ))
+        }
+        section id="adcs" { h2 { "ADC events" }
+            (table(
+                "adc",
+                ["id", "num", "dwell [s]", "delay [s]", "freq [Hz]", "phase [rad]"],
+                &adcs,
+            ))
+        }
+        section id="delays" { h2 { "Delays" }
+            (table("delay", ["id", "delay [s]"], &delays))
+        }
+        section id="extensions" { h2 { "Extensions" }
+            (table("ext-ref", ["id", "spec", "obj", "next"], &ext_refs))
+            @for spec in &ext_specs { (render_ext_spec(spec)) }
+        }
+        section id="shapes" { h2 { "Shapes" } (render_shapes_section(shapes)) }
+    };
+
+    let inline_script = html! {
+        "document.addEventListener('DOMContentLoaded', function () {\n"
+        (PreEscaped(plot_scripts(shapes)))
+        "});\n"
+    };
+
+    page(&title, "viewer-raw", body, inline_script)
 }
 
 // ---------------------------------------------------------------------------
-// Section renderers
+// Helpers
 // ---------------------------------------------------------------------------
 
-fn render_meta(v: &Version, sig: Option<&Signature>) -> String {
-    let mut out = format!(
-        "pulseq {}.{}.{}{}",
-        v.major,
-        v.minor,
-        v.revision,
-        v.rev_suppl.as_deref().unwrap_or("")
-    );
+/// Wrap a `&str` / `String` as plain auto-escaped Markup for use in cells.
+fn text(s: impl AsRef<str>) -> Markup {
+    html! { (s.as_ref()) }
+}
 
-    if let Some(sig) = sig {
-        if !out.is_empty() {
-            out.push_str(" &middot; ");
+fn id_ref(prefix: &str, id: u32) -> Markup {
+    if id == 0 {
+        text("0")
+    } else {
+        html! { a href=(format!("#{prefix}-{id}")) { (id) } }
+    }
+}
+
+fn render_dur(d: &BlockDuration) -> Markup {
+    match d {
+        BlockDuration::Duration(n) => text(n.to_string()),
+        BlockDuration::DelayId(0) => text("0"),
+        BlockDuration::DelayId(n) => html! {
+            a href=(format!("#delay-{n}")) { "#" (n) }
+        },
+    }
+}
+
+fn render_meta(v: &Version, sig: Option<&Signature>) -> Markup {
+    html! {
+        (format!("pulseq {}.{}.{}{}",
+            v.major, v.minor, v.revision, v.rev_suppl.as_deref().unwrap_or("")))
+        @if let Some(sig) = sig {
+            " · " (sig.typ) ": " (sig.hash)
         }
-        let _ = write!(out, "{}: {}", escape(&sig.typ), escape(&sig.hash),);
-    }
-    out
-}
-
-fn populate_definitions(template: &mut Template, defs: &[(String, String)]) {
-    for def in defs {
-        template
-            .definitions
-            .rows
-            .push([escape(&def.0), escape(&def.1)]);
     }
 }
 
-fn populate_blocks(template: &mut Template, blocks: &[Block]) {
-    for block in blocks {
-        template.blocks.rows.push([
-            block.id.to_string(),
-            render_dur(&block.dur),
-            id_ref("rf", block.rf),
-            id_ref("grad", block.gx),
-            id_ref("grad", block.gy),
-            id_ref("grad", block.gz),
-            id_ref("adc", block.adc),
-            id_ref("ext-ref", block.ext),
-        ])
+fn table<const N: usize>(
+    name: &str,
+    cols: [&str; N],
+    rows: &[(String, [Markup; N])],
+) -> Markup {
+    if rows.is_empty() {
+        return empty_section();
+    }
+    html! {
+        div.table-wrap { table class=(name) {
+            thead { tr { @for c in cols { th { (c) } } } }
+            tbody {
+                @for (id_str, row) in rows {
+                    tr id=(format!("{name}-{id_str}")) {
+                        @for cell in row { td { (cell) } }
+                    }
+                }
+            }
+        } }
     }
 }
 
-fn populate_rfs(template: &mut Template, rfs: &[Rf]) {
-    for rf in rfs {
-        let shim = match rf.shim_id {
-            None => "-".to_string(),
-            Some((m, p)) => format!("{}, {}", id_ref("shape", m), id_ref("shape", p)),
-        };
-
-        template.rfs.rows.push([
-            rf.id.to_string(),
-            rf.amp.to_string(),
-            id_ref("shape", rf.mag_id),
-            id_ref("shape", rf.phase_id),
-            id_ref("shape", rf.time_id),
-            format!("{:.6}", rf.delay),
-            rf.freq.to_string(),
-            format!("{:.4}", rf.phase),
-            shim,
-        ]);
-    }
+struct ExtSpec {
+    spec_id: u32,
+    name: String,
+    rows: Vec<(String, [Markup; 2])>,
 }
 
-fn populate_gradients(template: &mut Template, grads: &[Gradient]) {
-    for grad in grads {
-        template.gradients.rows.push([
-            grad.id.to_string(),
-            grad.amp.to_string(),
-            id_ref("shape", grad.shape_id),
-            id_ref("shape", grad.time_id),
-            format!("{:.6}", grad.delay),
-        ])
-    }
-}
-
-fn populate_traps(template: &mut Template, traps: &[Trap]) {
-    // grad/trap share an ID space — block.gx links to "grad-N" either way.
-    for trap in traps {
-        template.traps.rows.push([
-            trap.id.to_string(),
-            trap.amp.to_string(),
-            format!("{:.6}", trap.rise),
-            format!("{:.6}", trap.flat),
-            format!("{:.6}", trap.fall),
-            format!("{:.6}", trap.delay),
-        ])
-    }
-}
-
-fn populate_adcs(template: &mut Template, adcs: &[Adc]) {
-    for adc in adcs {
-        template.adcs.rows.push([
-            adc.id.to_string(),
-            adc.num.to_string(),
-            format!("{:.9}", adc.dwell),
-            format!("{:.6}", adc.delay),
-            adc.freq.to_string(),
-            format!("{:.4}", adc.phase),
-        ]);
-    }
-}
-
-fn populate_delays(template: &mut Template, delays: &[Delay]) {
-    for d in delays {
-        template
-            .delays
-            .rows
-            .push([d.id.to_string(), format!("{:.6}", d.delay)]);
-    }
-}
-
-fn populate_extensions(template: &mut Template, ext: &Extensions) {
-    for ext_ref in &ext.refs {
-        let obj = if ext_ref.obj_id == 0 {
-            "0".to_string()
+fn populate_extensions(
+    ext_refs: &mut Vec<(String, [Markup; 4])>,
+    ext_specs: &mut Vec<ExtSpec>,
+    ext: &Extensions,
+) {
+    for r in &ext.refs {
+        let obj = if r.obj_id == 0 {
+            text("0")
         } else {
-            format!(
-                r##"<a href="#ext-obj-{}-{}">{}</a>"##,
-                ext_ref.spec_id, ext_ref.obj_id, ext_ref.obj_id
-            )
+            html! { a href=(format!("#ext-obj-{}-{}", r.spec_id, r.obj_id)) { (r.obj_id) } }
         };
-        template.ext_refs.rows.push([
-            ext_ref.id.to_string(),
-            id_ref("ext-spec", ext_ref.spec_id),
-            obj,
-            id_ref("ext-ref", ext_ref.next),
-        ]);
+        ext_refs.push((
+            r.id.to_string(),
+            [
+                text(r.id.to_string()),
+                id_ref("ext-spec", r.spec_id),
+                obj,
+                id_ref("ext-ref", r.next),
+            ],
+        ));
     }
 
     for spec in &ext.specs {
-        let mut ext_spec = ExtSpec::new(spec.id, spec.name.clone());
+        let mut rows: Vec<(String, [Markup; 2])> = Vec::new();
         for obj in &spec.instances {
-            ext_spec
-                .table
-                .rows
-                .push([obj.id.to_string(), escape(&obj.data)]);
+            rows.push((obj.id.to_string(), [text(obj.id.to_string()), text(&obj.data)]));
         }
-        template.ext_specs.push(ext_spec);
+        ext_specs.push(ExtSpec { spec_id: spec.id, name: spec.name.clone(), rows });
     }
 }
 
-fn populate_shapes(template: &mut Template, shapes: &[Shape]) {
-    if shapes.is_empty() {
-        template.shapes = template::EMPTY_SECTION.to_owned();
+fn render_ext_spec(spec: &ExtSpec) -> Markup {
+    html! {
+        h3 id=(format!("ext-spec-{}", spec.spec_id)) {
+            "#" (spec.spec_id) " " (spec.name)
+        }
+        (table(
+            &format!("ext-obj-{}", spec.spec_id),
+            ["id", "data"],
+            &spec.rows,
+        ))
     }
+}
 
-    for shape in shapes {
-        let _ = write!(
-            template.shapes,
-            "<h3 id='shape-{id}'>Shape #{id} ({n} samples)</h3><div class='plot' id='shape-plot-{id}'></div>",
-            id = shape.id,
-            n = shape.samples.len(),
-        );
-        let _ = writeln!(
-            template.plot_scripts,
-            "Plotly.newPlot('shape-plot-{id}', [{{y: {y}, mode: 'lines', \
-              line: {{width: 1.2}}}}], \
-              Object.assign({{}}, common, {{xaxis: {{title: 'sample'}}}}), \
-              {{responsive: true, displaylogo: false}});",
-            id = shape.id,
-            y = json_floats(&shape.samples),
-        );
+fn render_shapes_section(shapes: &[Shape]) -> Markup {
+    if shapes.is_empty() {
+        return empty_section();
     }
+    html! {
+        @for s in shapes {
+            h3 id=(format!("shape-{}", s.id)) {
+                "Shape #" (s.id) " (" (s.samples.len()) " samples)"
+            }
+            div.plot id=(format!("shape-plot-{}", s.id)) {}
+        }
+    }
+}
+
+fn plot_scripts(shapes: &[Shape]) -> String {
+    let mut out = String::new();
+    for s in shapes {
+        out.push_str(&format!(
+            "Plotly.newPlot('shape-plot-{id}', [{{y: {y}, mode: 'lines', line: {{width: 1.2}}}}], \
+             Object.assign({{}}, common, {{xaxis: {{title: 'sample'}}}}), \
+             {{responsive: true, displaylogo: false}});\n",
+            id = s.id,
+            y = json_floats(&s.samples),
+        ));
+    }
+    out
 }
