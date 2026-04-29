@@ -163,7 +163,7 @@ pub enum ConversionError {
     TimeShapeNonIncreasing,
 }
 
-#[derive(Error, Debug)]
+#[derive(Error)]
 pub enum Error {
     #[error(transparent)]
     ParseError(#[from] ParseError),
@@ -173,4 +173,10 @@ pub enum Error {
     ConversionError(#[from] ConversionError),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
+}
+
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
 }
