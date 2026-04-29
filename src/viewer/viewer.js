@@ -6,8 +6,10 @@
 var common = { margin: { t: 10, r: 10, b: 30, l: 45 }, showlegend: false };
 
 // Used by viewer_structured's shape-popup hover behavior. The inline data
-// script populates this map with sample arrays keyed by shape id.
+// script populates these maps with sample arrays keyed by shape id.
 window.shapes = window.shapes || {};
+window.cshapes_re = window.cshapes_re || {};
+window.cshapes_im = window.cshapes_im || {};
 
 document.addEventListener('DOMContentLoaded', function () {
   // Shape-popup hover (viewer_structured). No-op in viewer_raw because there
@@ -19,6 +21,7 @@ document.addEventListener('DOMContentLoaded', function () {
     height: 240,
     xaxis: { title: 'sample' }
   };
+  var clayout = Object.assign({}, layout, { showlegend: true });
   var config = { responsive: false, displaylogo: false, displayModeBar: false };
   var registry = document.getElementById('shape-registry');
 
@@ -34,14 +37,37 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function ensureComplexPlotted(plotDiv, shapeId) {
+    if (!plotDiv.dataset.rendered) {
+      Plotly.newPlot(
+        plotDiv,
+        [
+          { y: window.cshapes_re[shapeId], mode: 'lines', line: { width: 1.2 }, name: 'real' },
+          { y: window.cshapes_im[shapeId], mode: 'lines', line: { width: 1.2 }, name: 'imag' }
+        ],
+        clayout,
+        config
+      );
+      plotDiv.dataset.rendered = '1';
+    }
+  }
+
   document.querySelectorAll('.shape-link').forEach(function (link) {
     var shapeId = link.dataset.shape;
-    var plotDiv = document.getElementById('shape-plot-' + shapeId);
+    var cshapeId = link.dataset.cshape;
+    var plotDiv, plotter;
+    if (shapeId) {
+      plotDiv = document.getElementById('shape-plot-' + shapeId);
+      plotter = function () { ensurePlotted(plotDiv, shapeId); };
+    } else if (cshapeId) {
+      plotDiv = document.getElementById('cshape-plot-' + cshapeId);
+      plotter = function () { ensureComplexPlotted(plotDiv, cshapeId); };
+    }
     var popup = link.querySelector('.shape-popup');
     if (!plotDiv || !popup) return;
     link.addEventListener('mouseenter', function () {
       popup.appendChild(plotDiv);
-      ensurePlotted(plotDiv, shapeId);
+      plotter();
     });
     link.addEventListener('mouseleave', function () {
       if (registry) registry.appendChild(plotDiv);

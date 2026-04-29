@@ -3,6 +3,8 @@ use std::{
     hash::Hash,
 };
 
+use num_complex::Complex64;
+
 use super::*;
 use crate::{
     error::{ConversionError, MissingDefinition, ParseFovError, SectionType},
@@ -94,23 +96,22 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         ))
     })?;
     let rfs = convert_sec(SectionType::Rfs, extract!(sections, Rfs), |rf| {
+        let shape = shape_lib.get_complex(rf.mag_id, rf.phase_id, rf.time_id)?;
+        let shim_shape = match rf.shim_id {
+            Some((mag_id, phase_id)) => Some(shape_lib.get_complex(mag_id, phase_id, 0)?),
+            None => None,
+        };
         Ok((
             rf.id,
             Arc::new(Rf {
                 amp: rf.amp,
                 phase: (rf.phase_rel, rf.phase_off),
-                amp_shape: shape_lib.get(rf.mag_id, rf.time_id)?,
-                phase_shape: shape_lib.get(rf.phase_id, rf.time_id)?,
+                shape,
                 delay: rf.delay,
                 // TODO: calc from shape if not set
                 center: rf.center.unwrap_or(-1.0),
                 freq: (rf.freq_rel, rf.freq_off),
-                shim_shape: match rf.shim_id {
-                    Some((mag_id, phase_id)) => {
-                        Some((shape_lib.get(mag_id, 0)?, shape_lib.get(phase_id, 0)?))
-                    }
-                    None => None,
-                },
+                shim_shape,
                 rf_use: RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
             }),
         ))
@@ -360,6 +361,7 @@ fn parse_fov(s: String) -> Result<(f64, f64, f64), ParseFovError> {
 struct ShapeLib {
     shapes: HashMap<u32, Arc<Shape>>,
     memo: HashMap<(u32, u32), Arc<Shape>>,
+    complex_memo: HashMap<(u32, u32, u32), Arc<ComplexShape>>,
 }
 
 impl ShapeLib {
@@ -371,34 +373,70 @@ impl ShapeLib {
             Ok(Self {
                 shapes,
                 memo: HashMap::default(),
+                complex_memo: HashMap::default(),
             })
         }
     }
-    fn get(&mut self, shape_id: u32, time_id: u32) -> Result<Arc<Shape>, error::ConversionError> {
+    fn get(&mut self, shape_id: u32, time_id: u32) -> Result<Arc<Shape>, ConversionError> {
+        let key = (shape_id, time_id);
+        if let Some(cached) = self.memo.get(&key) {
+            return Ok(cached.clone());
+        }
+
+        // First we get the shape itself,
+        // then we see if can use it directly or need to expand it with the time shape
         let shape = self
             .shapes
             .get(&shape_id)
             .ok_or(ConversionError::ShapeNotFound(shape_id))?;
 
-        if time_id == 0 {
-            // Just a normal, continuous shape
-            Ok(shape.clone())
+        let shape = if time_id == 0 {
+            shape.clone()
         } else {
-            // This shape skips some samples as defined by the time shape, expand it
             let time = self
                 .shapes
                 .get(&time_id)
                 .ok_or(ConversionError::ShapeNotFound(time_id))?;
 
-            // Avoid duplicates if shape was expanded before
-            match self.memo.entry((shape_id, time_id)) {
-                Entry::Occupied(e) => Ok(e.get().clone()),
-                Entry::Vacant(e) => {
-                    let expanded = Arc::new(expand_shape(shape, time)?);
-                    Ok(e.insert(expanded).clone())
-                }
-            }
+            Arc::new(expand_shape(shape, time)?)
+        };
+
+        self.memo.insert(key, shape.clone());
+        Ok(shape)
+    }
+
+    fn get_complex(
+        &mut self,
+        mag_id: u32,
+        phase_id: u32,
+        time_id: u32,
+    ) -> Result<Arc<ComplexShape>, ConversionError> {
+        let key = (mag_id, phase_id, time_id);
+        if let Some(cached) = self.complex_memo.get(&key) {
+            return Ok(cached.clone());
         }
+
+        let mag = self.get(mag_id, time_id)?;
+        let phase = self.get(phase_id, time_id)?;
+
+        if mag.0.len() != phase.0.len() {
+            // TODO: can't be the time shape (is the same) but only happen when time_id==0 and shapes mismatch
+            return Err(ConversionError::TimeShapeMismatch {
+                shape_len: mag.0.len(),
+                time_len: phase.0.len(),
+            });
+        }
+
+        let samples = mag
+            .0
+            .iter()
+            .zip(phase.0.iter())
+            .map(|(&a, &p)| Complex64::from_polar(a, p * std::f64::consts::TAU))
+            .collect();
+
+        let shape = Arc::new(ComplexShape(samples));
+        self.complex_memo.insert(key, shape.clone());
+        Ok(shape)
     }
 }
 

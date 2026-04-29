@@ -4,7 +4,7 @@ mod sequence;
 
 pub use error::Error;
 pub use parse_file::parse_file;
-pub use sequence::{Adc, Block, Extension, Gradient, Rf, Sequence, Shape, TimeRaster};
+pub use sequence::{Adc, Block, ComplexShape, Extension, Gradient, Rf, Sequence, Shape, TimeRaster};
 
 /// Raw parser types, mirroring the .seq file structure directly.
 /// Use for tooling that needs to see IDs, references, and shapes as written.

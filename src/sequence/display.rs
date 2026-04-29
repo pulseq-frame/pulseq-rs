@@ -39,20 +39,20 @@ impl Display for Sequence {
             block.fmt(f, &mut rf_refs, &mut grad_refs, &mut adc_refs)?;
         }
 
-        let mut shape_refs = RefPrinter::new();
-
+        let mut cshape_refs = RefPrinter::new();
         writeln!(f, "\n\nRFS")?;
         writeln!(f, "---")?;
         writeln!(
             f,
-            "#  ID       amp {{ ID}}  phase×λ    phase {{ ID}}    delay   freq×λ     freq"
+            "#  ID       amp {{ ID}}  phase×λ    phase    delay   freq×λ     freq"
         )?;
         writeln!(
             f,
             "#                [HZ]          [rel]    [rad]     [ms]    [rel]    [kHz]"
         )?;
-        rf_refs.fmt(f, &mut shape_refs)?;
+        rf_refs.fmt(f, &mut cshape_refs)?;
 
+        let mut shape_refs = RefPrinter::new();
         writeln!(f, "\n\nGRADIENTS")?;
         writeln!(f, "---------")?;
         writeln!(f, "#  ID  F    delay      amp {{ ID}}")?;
@@ -82,6 +82,11 @@ impl Display for Sequence {
         writeln!(f, "------")?;
         writeln!(f, "#  ID     num")?;
         write!(f, "{shape_refs}")?;
+
+        writeln!(f, "\nCOMPLEX SHAPES")?;
+        writeln!(f, "--------------")?;
+        writeln!(f, "#  ID     num")?;
+        write!(f, "{cshape_refs}")?;
 
         Ok(())
     }
@@ -148,7 +153,7 @@ impl RefPrinter<Rf> {
     fn fmt(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        shape_refs: &mut RefPrinter<Shape>,
+        cshape_refs: &mut RefPrinter<ComplexShape>,
     ) -> std::fmt::Result {
         let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
         tmp.sort_by_key(|(_, id)| *id);
@@ -156,12 +161,11 @@ impl RefPrinter<Rf> {
         for (rc, id) in tmp {
             writeln!(
                 f,
-                "[{id:4}] {:8.3} {{{}}} {:8.3} {:8.3} {{{}}} {:8.3} {:8.3} {:8.3}",
+                "[{id:4}] {:8.3} {{{}}} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3}",
                 rc.amp,
-                shape_refs.print(&rc.amp_shape),
+                cshape_refs.print(&rc.shape),
                 rc.phase.0,
                 rc.phase.1,
-                shape_refs.print(&rc.phase_shape),
                 rc.delay * 1e3,
                 rc.freq.0,
                 rc.freq.1 / 1e3,
@@ -196,6 +200,19 @@ impl Display for RefPrinter<Adc> {
 }
 
 impl Display for RefPrinter<Shape> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
+        tmp.sort_by_key(|(_, id)| *id);
+
+        for (rc, id) in tmp {
+            writeln!(f, "[{id:4}] {:6}", rc.0.len())?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Display for RefPrinter<ComplexShape> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
         tmp.sort_by_key(|(_, id)| *id);

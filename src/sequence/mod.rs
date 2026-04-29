@@ -1,6 +1,8 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
 use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
 
+use num_complex::Complex64;
+
 use crate::{
     error::{self, EventType, ValidationError},
     parse_file::{self, Section},
@@ -77,11 +79,10 @@ impl Sequence {
             check(block.adc.as_ref().map(|adc| adc.duration()), EventType::Adc)?;
         }
 
-        // Check things like identical shape size and no negative times
+        // Check things like no negative times
         for block in &self.blocks {
             let id = block.id;
             use EventType::*;
-            block.rf.as_ref().map_or(Ok(()), |x| x.validate(id))?;
             block.gx.as_ref().map_or(Ok(()), |x| x.validate(Gx, id))?;
             block.gy.as_ref().map_or(Ok(()), |x| x.validate(Gy, id))?;
             block.gz.as_ref().map_or(Ok(()), |x| x.validate(Gz, id))?;
@@ -139,13 +140,14 @@ pub struct Rf {
     pub center: f64,
     /// (rel_to_larmor, offset) - Unit: (`[Hz/Hz]`, `[Hz]`)
     pub freq: (f64, f64),
-    // Shapes
-    pub amp_shape: Arc<Shape>,
-    pub phase_shape: Arc<Shape>,
-    // pTx extension
-    pub shim_shape: Option<(Arc<Shape>, Arc<Shape>)>,
+    /// Combined amplitude × exp(i × phase) shape
+    pub shape: Arc<ComplexShape>,
+    /// pTx extension: per-channel amplitude × exp(i × phase)
+    pub shim_shape: Option<Arc<ComplexShape>>,
     pub rf_use: RfUse,
 }
+
+pub struct ComplexShape(pub Vec<Complex64>);
 
 pub enum RfUse {
     Excitation,
@@ -227,19 +229,7 @@ pub struct Shape(pub Vec<f64>);
 
 impl Rf {
     pub fn duration(&self, rf_raster: f64) -> f64 {
-        self.delay + self.amp_shape.0.len() as f64 * rf_raster
-    }
-
-    fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
-        if self.phase_shape.0.len() != self.amp_shape.0.len() {
-            Err(ValidationError::ShapeMismatch {
-                ty: EventType::Rf,
-                block_id,
-                length_1: self.phase_shape.0.len(),
-                length_2: self.amp_shape.0.len(),
-            })?;
-        }
-        Ok(())
+        self.delay + self.shape.0.len() as f64 * rf_raster
     }
 }
 

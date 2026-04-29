@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use maud::{Markup, PreEscaped, html};
-use pulseq_rs::{Adc, Block, Extension, Gradient, Rf, Sequence, Shape};
+use pulseq_rs::{Adc, Block, ComplexShape, Extension, Gradient, Rf, Sequence, Shape};
 
 use crate::viewer::{fmt_seconds, json_floats, page};
 
@@ -22,6 +22,7 @@ struct Counters {
     grad: HashMap<*const Gradient, u32>,
     adc: HashMap<*const Adc, u32>,
     shape: HashMap<*const Shape, u32>,
+    cshape: HashMap<*const ComplexShape, u32>,
     shape_data: String,
     shape_divs: String,
 }
@@ -48,6 +49,24 @@ impl Counters {
         self.shape.insert(ptr, id);
         let _ = writeln!(self.shape_data, "shapes[{id}] = {};", json_floats(&x.0));
         let _ = writeln!(self.shape_divs, "<div id='shape-plot-{id}'></div>");
+        id
+    }
+    fn complex_shape(&mut self, x: &Arc<ComplexShape>) -> u32 {
+        let ptr = Arc::as_ptr(x);
+        if let Some(&existing) = self.cshape.get(&ptr) {
+            return existing;
+        }
+        let id = self.cshape.len() as u32 + 1;
+        let re: Vec<f64> = x.0.iter().map(|c| c.re).collect();
+        let im: Vec<f64> = x.0.iter().map(|c| c.im).collect();
+        let _ = writeln!(
+            self.shape_data,
+            "cshapes_re[{id}] = {}; cshapes_im[{id}] = {};",
+            json_floats(&re),
+            json_floats(&im),
+        );
+        let _ = writeln!(self.shape_divs, "<div id='cshape-plot-{id}'></div>");
+        self.cshape.insert(ptr, id);
         id
     }
 }
@@ -79,7 +98,7 @@ pub fn render(input: &Path, seq: &Sequence) -> String {
     };
 
     let inline_script = html! {
-        "var shapes = {};\n"
+        "var shapes = {};\nvar cshapes_re = {};\nvar cshapes_im = {};\n"
         (PreEscaped(counters.shape_data))
     };
 
@@ -176,14 +195,23 @@ fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> Markup {
                 li { strong { "delay" } (fmt_seconds(rf.delay)) }
                 li { strong { "center" } (fmt_seconds(rf.center)) }
                 li { strong { "freq" } (rf.freq.0) "×λ + " (rf.freq.1) " Hz" }
-                li { strong { "amp shape" } (render_shape_link(&rf.amp_shape, counters)) }
-                li { strong { "phase shape" } (render_shape_link(&rf.phase_shape, counters)) }
-                @if let Some((mag, phase)) = &rf.shim_shape {
-                    li { strong { "shim mag" } (render_shape_link(mag, counters)) }
-                    li { strong { "shim phase" } (render_shape_link(phase, counters)) }
+                li { strong { "shape" } (render_complex_shape_link(&rf.shape, counters)) }
+                @if let Some(shim) = &rf.shim_shape {
+                    li { strong { "shim" } (render_complex_shape_link(shim, counters)) }
                 }
                 li { strong { "use" } (rf.rf_use) }
             } }
+        }
+    }
+}
+
+fn render_complex_shape_link(shape: &Arc<ComplexShape>, counters: &mut Counters) -> Markup {
+    let id = counters.complex_shape(shape);
+    let n = shape.0.len();
+    html! {
+        span.shape-link data-cshape=(id) {
+            (format!("shape {id:02x} ({n} samples)"))
+            span.shape-popup {}
         }
     }
 }
