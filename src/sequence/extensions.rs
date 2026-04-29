@@ -27,7 +27,13 @@ pub enum Extension {
         text_id: String,
         t_offset: f64,
         t_factor: f64,
-    }
+    },
+    /// Rotates the gradient of the current block as described by the quaternion.
+    /// Values correspond to spec: (RotQuat0, RotQuatX, RotQuatY, RotQuatZ)
+    Rotation { quat: [f64; 4] },
+    /// Official RF Shimming extension - different impl to Martins pulse shims!
+    /// Contains a list of per-channel (amplitude, phase)
+    Shimming { shim: Vec<[f64; 2]> },
 }
 
 impl Extension {
@@ -37,11 +43,38 @@ impl Extension {
             "labelinc" => parse_labelinc(data),
             "triggers" => parse_trigger(data),
             "delays" => parse_delay(data),
+            "rotations" => parse_rotation(data),
+            "rf_shims" => parse_shims(data),
             _ => Self::Unsupported {
                 string_id: string_id.to_owned(),
                 data: data.to_owned(),
             },
         }
+    }
+}
+
+fn parse_shims(data: &str) -> Extension {
+    let mut part = data.split_whitespace().map(|s| s.trim());
+    let channel_count: u32 = part.next().expect("channel count").parse().unwrap();
+    let shim_values: Vec<f64> = part.map(|s| s.parse().unwrap()).collect();
+    assert_eq!(shim_values.len(), channel_count as usize * 2);
+
+    Extension::Shimming {
+        shim: shim_values
+            .chunks_exact(2)
+            .map(|chunk| [chunk[0], chunk[1]])
+            .collect(),
+    }
+}
+
+fn parse_rotation(data: &str) -> Extension {
+    Extension::Rotation {
+        quat: data
+            .split_whitespace()
+            .map(|s| s.trim().parse::<f64>().unwrap())
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("rotation extension expects 4 floats"),
     }
 }
 

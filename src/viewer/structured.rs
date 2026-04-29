@@ -252,28 +252,50 @@ struct ExtensionRender<'a>(&'a Extension);
 #[cfg(feature = "viewer")]
 impl<'a> maud::Render for ExtensionRender<'a> {
     fn render(&self) -> maud::Markup {
+        use maud::html;
+
         match &self.0 {
-            Extension::Unsupported { string_id, data } => maud::html! {
+            Extension::Unsupported { string_id, data } => html! {
                 li { em.ext-unsupported { (string_id) } code { (data) } }
             },
-            Extension::LabelSet { flag, value } => maud::html! {
+            Extension::LabelSet { flag, value } => html! {
                 li { strong { "LABELSET" } code { (flag) " = " (value) } }
             },
-            Extension::LabelInc { counter, value } => maud::html! {
+            Extension::LabelInc { counter, value } => html! {
                 li { strong { "LABELINC" } code { (counter) " += " (value) } }
             },
-            Extension::Trigger { typ, channel, delay, duration } => maud::html! {
+            Extension::Trigger {
+                typ,
+                channel,
+                delay,
+                duration,
+            } => html! {
                 li { strong { "TRIGGER" } code {
                     "type=" (typ) ", channel=" (channel)
                     ", delay=" (fmt_seconds(*delay))
                     ", duration=" (fmt_seconds(*duration))
                 } }
             },
-            Extension::Delay { numeric_id, text_id, t_offset, t_factor } => maud::html! {
+            Extension::Delay {
+                numeric_id,
+                text_id,
+                t_offset,
+                t_factor,
+            } => html! {
                 li { strong { "DELAY" } code {
                     "#" (numeric_id) " \"" (text_id) "\""
                     ", offset=" (fmt_seconds(*t_offset))
                     ", factor=" (t_factor)
+                } }
+            },
+            Extension::Rotation { quat } => html! {
+                li { strong { "ROTATE" } code { (format!("{quat:?}")) } }
+            },
+            Extension::Shimming { shim } => html! {
+                li { strong { "SHIM" } code {
+                    @for (i, ch) in shim.iter().enumerate() {
+                        (format!(" ch{}=({:.3}, {:.3}°)", i + 1, ch[0], ch[1].to_degrees()))
+                    }
                 } }
             },
         }
