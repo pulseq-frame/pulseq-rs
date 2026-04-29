@@ -133,6 +133,8 @@ pub struct Rf {
     pub phase_off: f64,
     /// shim_mag_ID, shim_phase_ID
     pub shim_id: Option<(u32, u32)>,
+    /// use - initial char of use identifier
+    pub rf_use: char,
 }
 
 #[derive(Debug)]

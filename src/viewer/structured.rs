@@ -181,6 +181,7 @@ fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> Markup {
                     li { strong { "shim mag" } (render_shape_link(mag, counters)) }
                     li { strong { "shim phase" } (render_shape_link(phase, counters)) }
                 }
+                li { strong { "use" } (rf.rf_use) }
             } }
         }
     }

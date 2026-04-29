@@ -1,5 +1,5 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
 
 use crate::{
     error::{self, EventType, ValidationError},
@@ -142,6 +142,46 @@ pub struct Rf {
     pub phase_shape: Arc<Shape>,
     // pTx extension
     pub shim_shape: Option<(Arc<Shape>, Arc<Shape>)>,
+    pub rf_use: RfUse,
+}
+
+pub enum RfUse {
+    Excitation,
+    Refocusing,
+    Inversion,
+    Saturation,
+    Preparation,
+    Other,
+    Undefined,
+}
+
+impl RfUse {
+    pub fn from_char(c: char) -> Option<Self> {
+        match c {
+            'e' => Some(Self::Excitation),
+            'r' => Some(Self::Refocusing),
+            'i' => Some(Self::Inversion),
+            's' => Some(Self::Saturation),
+            'p' => Some(Self::Preparation),
+            'o' => Some(Self::Other),
+            'u' => Some(Self::Undefined),
+            _ => None,
+        }
+    }
+}
+
+impl Display for RfUse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            RfUse::Excitation => "Excitation",
+            RfUse::Refocusing => "Refocusing",
+            RfUse::Inversion => "Inversion",
+            RfUse::Saturation => "Saturation",
+            RfUse::Preparation => "Preparation",
+            RfUse::Other => "Other",
+            RfUse::Undefined => "Undefined",
+        })
+    }
 }
 
 pub enum Gradient {

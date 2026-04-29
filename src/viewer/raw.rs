@@ -12,7 +12,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
 
     let mut definitions: Vec<(String, [Markup; 2])> = Vec::new();
     let mut blocks: Vec<(String, [Markup; 8])> = Vec::new();
-    let mut rfs: Vec<(String, [Markup; 12])> = Vec::new();
+    let mut rfs: Vec<(String, [Markup; 13])> = Vec::new();
     let mut gradients: Vec<(String, [Markup; 5])> = Vec::new();
     let mut traps: Vec<(String, [Markup; 6])> = Vec::new();
     let mut adcs: Vec<(String, [Markup; 6])> = Vec::new();
@@ -63,13 +63,14 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             id_ref("shape", rf.mag_id),
                             id_ref("shape", rf.phase_id),
                             id_ref("shape", rf.time_id),
-                            text(rf.center.map_or("".to_owned(), |x| x.to_string())),
+                            text(rf.center.map_or("-".to_owned(), |x| x.to_string())),
                             text(format!("{:.6}", rf.delay)),
                             text(rf.freq_rel.to_string()),
                             text(rf.freq_rel.to_string()),
                             text(rf.freq_off.to_string()),
                             text(format!("{:.4}", rf.phase_off)),
                             shim,
+                            text(rf.rf_use.to_string()),
                         ],
                     ));
                 }
@@ -155,7 +156,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         section id="rfs" { h2 { "RF events" }
             (table(
                 "rf",
-                ["id", "amp [Hz]", "mag", "phase", "time", "center [s]", "delay [s]", "freq [rel]", "phase [rel]", "freq [Hz]", "phase [rad]", "shim"],
+                ["id", "amp [Hz]", "mag", "phase", "time", "center [s]", "delay [s]", "freq [rel]", "phase [rel]", "freq [Hz]", "phase [rad]", "shim", "use"],
                 &rfs,
             ))
         }

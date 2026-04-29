@@ -1,6 +1,7 @@
 use winnow::combinator::{alt, cut_err, empty, opt, preceded, repeat, seq};
 use winnow::error::StrContext;
 use winnow::prelude::*;
+use winnow::token::one_of;
 
 use super::pulseq_1_2::{adcs, definitions, shapes, traps, version};
 use super::pulseq_1_3::extensions;
@@ -46,6 +47,7 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
         phase_off: cut_err(float),
         // pulseq 1.5 uses the shim extension instead of Martins modification
         shim_id: empty.value(None),
+        rf_use: cut_err(preceded(ws, one_of(['e', 'r', 'i', 's', 'p', 'o', 'u']))),
         _: cut_err(nl),
     }}
     .context(StrContext::Label("rf record"));

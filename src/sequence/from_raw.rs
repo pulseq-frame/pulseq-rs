@@ -100,6 +100,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                     }
                     None => None,
                 },
+                rf_use: RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
             }),
         ))
     })?;
