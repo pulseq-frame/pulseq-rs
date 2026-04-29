@@ -3,7 +3,7 @@ use winnow::error::StrContext;
 use winnow::prelude::*;
 use winnow::token::one_of;
 
-use super::pulseq_1_2::{adcs, definitions, shapes, traps, version};
+use super::pulseq_1_2::{definitions, shapes, traps, version};
 use super::pulseq_1_3::extensions;
 use super::pulseq_1_4::{blocks, gradients, signature};
 use super::{helpers::*, *};
@@ -54,5 +54,24 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
 
     preceded(tag_nl("[RF]"), repeat(0.., rf))
         .context(StrContext::Label("[RF] section"))
+        .parse_next(input)
+}
+
+pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
+    let adc = seq! {Adc {
+        id: int,
+        num: cut_err(int),
+        dwell: cut_err(float).map(|d: f64| d * 1e-9),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        freq_rel: cut_err(float).map(|x| x * 1e-6),
+        phase_rel: cut_err(float).map(|x| x * 1e-6),
+        freq_off: cut_err(float),
+        phase_off: cut_err(float),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("adc record"));
+
+    preceded(tag_nl("[ADC]"), repeat(0.., adc))
+        .context(StrContext::Label("[ADC] section"))
         .parse_next(input)
 }

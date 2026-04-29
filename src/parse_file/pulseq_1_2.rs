@@ -141,8 +141,10 @@ pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
         num: cut_err(int),
         dwell: cut_err(float).map(|d: f64| d * 1e-9),
         delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
-        freq: cut_err(float),
-        phase: cut_err(float),
+        freq_rel: empty.value(1.0),
+        phase_rel: empty.value(1.0),
+        freq_off: cut_err(float),
+        phase_off: cut_err(float),
         _: cut_err(nl),
     }}
     .context(StrContext::Label("adc record"));

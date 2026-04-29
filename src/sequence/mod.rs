@@ -213,10 +213,10 @@ pub struct Adc {
     pub dwell: f64,
     /// Unit: `[s]`
     pub delay: f64,
-    /// Unit: `[Hz]`
-    pub freq: f64,
-    /// Unit: `[rad]`
-    pub phase: f64,
+    /// (rel_to_larmor, offset) - Unit: (`[Hz/Hz]`, `[Hz]`)
+    pub freq: (f64, f64),
+    /// (rel_to_larmor, offset) - Unit: (`[rad/Hz]`, `[rad]`)
+    pub phase: (f64, f64),
 }
 
 pub struct Shape(pub Vec<f64>);

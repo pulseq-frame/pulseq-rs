@@ -171,10 +171,14 @@ pub struct Adc {
     pub dwell: f64,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
-    /// `Hz`
-    pub freq: f64,
-    /// `rad`
-    pub phase: f64,
+    /// relative to system frequency
+    pub freq_rel: f64,
+    /// relative to system frequency
+    pub phase_rel: f64,
+    /// `Hz` (offset to system frequency)
+    pub freq_off: f64,
+    /// `rad` (offset to system frequency)
+    pub phase_off: f64,
 }
 
 #[derive(Debug)]

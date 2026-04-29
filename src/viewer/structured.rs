@@ -241,8 +241,8 @@ fn render_adc_tag(adc: &Arc<Adc>, counters: &mut Counters) -> Markup {
                 li { strong { "num" } (adc.num) }
                 li { strong { "dwell" } (fmt_seconds(adc.dwell)) }
                 li { strong { "delay" } (fmt_seconds(adc.delay)) }
-                li { strong { "freq" } (adc.freq) " Hz" }
-                li { strong { "phase" } (adc.phase) " rad" }
+                li { strong { "freq" } (adc.freq.0) "×λ + " (adc.freq.1) " Hz" }
+                li { strong { "phase" } (adc.phase.0) "×λ + " (adc.phase.1) " rad" }
             } }
         }
     }

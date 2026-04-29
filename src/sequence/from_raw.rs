@@ -79,8 +79,8 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 num: adc.num,
                 dwell: adc.dwell,
                 delay: adc.delay,
-                freq: adc.freq,
-                phase: adc.phase,
+                freq: (adc.freq_rel, adc.freq_off),
+                phase: (adc.phase_rel, adc.phase_off),
             }),
         ))
     })?;

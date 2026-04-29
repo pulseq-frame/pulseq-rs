@@ -15,7 +15,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
     let mut rfs: Vec<(String, [Markup; 13])> = Vec::new();
     let mut gradients: Vec<(String, [Markup; 5])> = Vec::new();
     let mut traps: Vec<(String, [Markup; 6])> = Vec::new();
-    let mut adcs: Vec<(String, [Markup; 6])> = Vec::new();
+    let mut adcs: Vec<(String, [Markup; 8])> = Vec::new();
     let mut delays: Vec<(String, [Markup; 2])> = Vec::new();
     let mut ext_refs: Vec<(String, [Markup; 4])> = Vec::new();
     let mut ext_specs: Vec<ExtSpec> = Vec::new();
@@ -66,9 +66,9 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             text(rf.center.map_or("-".to_owned(), |x| x.to_string())),
                             text(format!("{:.6}", rf.delay)),
                             text(rf.freq_rel.to_string()),
-                            text(rf.freq_rel.to_string()),
+                            text(rf.phase_rel.to_string()),
                             text(rf.freq_off.to_string()),
-                            text(format!("{:.4}", rf.phase_off)),
+                            text(rf.phase_off.to_string()),
                             shim,
                             text(rf.rf_use.to_string()),
                         ],
@@ -114,8 +114,10 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             text(a.num.to_string()),
                             text(format!("{:.9}", a.dwell)),
                             text(format!("{:.6}", a.delay)),
-                            text(a.freq.to_string()),
-                            text(format!("{:.4}", a.phase)),
+                            text(a.freq_rel.to_string()),
+                            text(a.phase_rel.to_string()),
+                            text(a.freq_off.to_string()),
+                            text(a.phase_off.to_string()),
                         ],
                     ));
                 }
@@ -173,7 +175,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         section id="adcs" { h2 { "ADC events" }
             (table(
                 "adc",
-                ["id", "num", "dwell [s]", "delay [s]", "freq [Hz]", "phase [rad]"],
+                ["id", "num", "dwell [s]", "delay [s]", "freq [rel]", "phase [rel]", "freq [Hz]", "phase [rad]"],
                 &adcs,
             ))
         }

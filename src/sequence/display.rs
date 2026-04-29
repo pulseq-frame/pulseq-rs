@@ -68,8 +68,14 @@ impl Display for Sequence {
 
         writeln!(f, "\n\nADCS")?;
         writeln!(f, "----")?;
-        writeln!(f, "#  ID   num    dwell    delay     freq    phase")?;
-        writeln!(f, "#               [us]     [ms]     [Hz]    [rad]")?;
+        writeln!(
+            f,
+            "#  ID   num    dwell    delay   freq×λ    freq  phase×λ   phase"
+        )?;
+        writeln!(
+            f,
+            "#               [us]     [ms]    [rel]    [Hz]    [rel]   [rad]"
+        )?;
         writeln!(f, "{adc_refs}")?;
 
         writeln!(f, "\nSHAPES")?;
@@ -174,12 +180,14 @@ impl Display for RefPrinter<Adc> {
         for (rc, id) in tmp {
             writeln!(
                 f,
-                "[{id:4}] {:4} {:8.3} {:8.3} {:8.3} {:8.3}",
+                "[{id:4}] {:4} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3} {:8.3}",
                 rc.num,
                 rc.dwell * 1e6,
                 rc.delay * 1e3,
-                rc.freq / 1e3,
-                rc.phase,
+                rc.freq.0,
+                rc.freq.1 / 1e3,
+                rc.phase.0,
+                rc.phase.1,
             )?;
         }
 
