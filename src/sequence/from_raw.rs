@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    hash::Hash,
-};
+use std::{collections::HashMap, hash::Hash};
 
 use num_complex::Complex64;
 
@@ -84,6 +81,11 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         Ok((delay.id, delay.delay))
     })?;
     let adcs = convert_sec(SectionType::Adcs, extract!(sections, Adcs), |adc| {
+        let phase_shape = if adc.phase_shape_id == 0 {
+            None
+        } else {
+            Some(shape_lib.get(adc.phase_shape_id, 0)?)
+        };
         Ok((
             adc.id,
             Arc::new(Adc {
@@ -92,6 +94,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 delay: adc.delay,
                 freq: (adc.freq_rel, adc.freq_off),
                 phase: (adc.phase_rel, adc.phase_off),
+                phase_shape,
             }),
         ))
     })?;

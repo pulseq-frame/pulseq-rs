@@ -15,7 +15,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
     let mut rfs: Vec<(String, [Markup; 13])> = Vec::new();
     let mut gradients: Vec<(String, [Markup; 5])> = Vec::new();
     let mut traps: Vec<(String, [Markup; 6])> = Vec::new();
-    let mut adcs: Vec<(String, [Markup; 8])> = Vec::new();
+    let mut adcs: Vec<(String, [Markup; 9])> = Vec::new();
     let mut delays: Vec<(String, [Markup; 2])> = Vec::new();
     let mut ext_refs: Vec<(String, [Markup; 4])> = Vec::new();
     let mut ext_specs: Vec<ExtSpec> = Vec::new();
@@ -118,6 +118,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             text(a.phase_rel.to_string()),
                             text(a.freq_off.to_string()),
                             text(a.phase_off.to_string()),
+                            id_ref("shape", a.phase_shape_id),
                         ],
                     ));
                 }
@@ -175,7 +176,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         section id="adcs" { h2 { "ADC events" }
             (table(
                 "adc",
-                ["id", "num", "dwell [s]", "delay [s]", "freq [rel]", "phase [rel]", "freq [Hz]", "phase [rad]"],
+                ["id", "num", "dwell [s]", "delay [s]", "freq [rel]", "phase [rel]", "freq [Hz]", "phase [rad]", "phase shape"],
                 &adcs,
             ))
         }

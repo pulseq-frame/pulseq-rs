@@ -179,6 +179,8 @@ pub struct Adc {
     pub freq_off: f64,
     /// `rad` (offset to system frequency)
     pub phase_off: f64,
+    /// optional per-sample adc phase - WIP: no examples found
+    pub phase_shape_id: u32,
 }
 
 #[derive(Debug)]

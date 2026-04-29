@@ -221,6 +221,8 @@ pub struct Adc {
     pub freq: (f64, f64),
     /// (rel_to_larmor, offset) - Unit: (`[rad/Hz]`, `[rad]`)
     pub phase: (f64, f64),
+    /// No examples given - assuming `[rad]` shape?
+    pub phase_shape: Option<Arc<Shape>>,
 }
 
 pub struct Shape(pub Vec<f64>);
