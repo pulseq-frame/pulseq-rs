@@ -149,6 +149,20 @@ pub struct Rf {
 
 pub struct ComplexShape(pub Vec<Complex64>);
 
+impl ComplexShape {
+    /// Used to compute rf centers in pre 1.5 sequences.
+    /// This is a very rough approximation - it assumes the center is the point with the highest amplitude.
+    /// Returns the index into the shape that is closest to the center of the pulse (need to multiply with rf raster)
+    pub fn calc_center(&self) -> usize {
+        self.0
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.norm().total_cmp(&b.1.norm()))
+            .map(|(i, _)| i)
+            .unwrap()
+    }
+}
+
 pub enum RfUse {
     Excitation,
     Refocusing,

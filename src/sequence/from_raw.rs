@@ -104,6 +104,10 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
             Some((mag_id, phase_id)) => Some(shape_lib.get_complex(mag_id, phase_id, 0)?),
             None => None,
         };
+        let center = rf
+            .center
+            .unwrap_or_else(|| rf.delay + time_raster.rf * shape.calc_center() as f64);
+
         Ok((
             rf.id,
             Arc::new(Rf {
@@ -111,8 +115,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 phase: (rf.phase_rel, rf.phase_off),
                 shape,
                 delay: rf.delay,
-                // TODO: calc from shape if not set
-                center: rf.center.unwrap_or(-1.0),
+                center,
                 freq: (rf.freq_rel, rf.freq_off),
                 shim_shape,
                 rf_use: RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
