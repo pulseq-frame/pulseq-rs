@@ -45,9 +45,12 @@ impl Display for Sequence {
         writeln!(f, "---")?;
         writeln!(
             f,
-            "#  ID       amp {{ ID}}    phase {{ ID}}    delay     freq"
+            "#  ID       amp {{ ID}}  phase×λ    phase {{ ID}}    delay   freq×λ     freq"
         )?;
-        writeln!(f, "#                [HZ]          [rad]     [ms]    [kHz]")?;
+        writeln!(
+            f,
+            "#                [HZ]          [rel]    [rad]     [ms]    [rel]    [kHz]"
+        )?;
         rf_refs.fmt(f, &mut shape_refs)?;
 
         writeln!(f, "\n\nGRADIENTS")?;
@@ -147,13 +150,15 @@ impl RefPrinter<Rf> {
         for (rc, id) in tmp {
             writeln!(
                 f,
-                "[{id:4}] {:8.3} {{{}}} {:8.3} {{{}}} {:8.3} {:8.3}",
+                "[{id:4}] {:8.3} {{{}}} {:8.3} {:8.3} {{{}}} {:8.3} {:8.3} {:8.3}",
                 rc.amp,
                 shape_refs.print(&rc.amp_shape),
-                rc.phase,
+                rc.phase.0,
+                rc.phase.1,
                 shape_refs.print(&rc.phase_shape),
                 rc.delay * 1e3,
-                rc.freq / 1e3,
+                rc.freq.0,
+                rc.freq.1 / 1e3,
             )?;
         }
 

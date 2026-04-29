@@ -80,9 +80,12 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
         mag_id: cut_err(int),
         phase_id: cut_err(int),
         time_id: empty.value(0),
+        center: empty.value(None),
         delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
-        freq: cut_err(float),
-        phase: cut_err(float),
+        freq_rel: empty.value(1.0),
+        phase_rel: empty.value(1.0),
+        freq_off: cut_err(float),
+        phase_off: cut_err(float),
         shim_id: opt((int, int)).map(|s| match s {
             Some((0, 0)) => None,  // no shim - 0 is an invalid shape_id
             _ => s,

@@ -172,9 +172,9 @@ fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> Markup {
             (format!("<RF_{id:02X}>"))
             span.ext-popup { ul {
                 li { strong { "amp" } (rf.amp) " Hz" }
-                li { strong { "phase" } (rf.phase) " rad" }
+                li { strong { "phase" } (rf.phase.0) "×λ + " (rf.phase.1) " rad" }
                 li { strong { "delay" } (fmt_seconds(rf.delay)) }
-                li { strong { "freq" } (rf.freq) " Hz" }
+                li { strong { "freq" } (rf.freq.0) "×λ + " (rf.freq.1) " Hz" }
                 li { strong { "amp shape" } (render_shape_link(&rf.amp_shape, counters)) }
                 li { strong { "phase shape" } (render_shape_link(&rf.phase_shape, counters)) }
                 @if let Some((mag, phase)) = &rf.shim_shape {

@@ -89,11 +89,11 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
             rf.id,
             Arc::new(Rf {
                 amp: rf.amp,
-                phase: rf.phase,
+                phase: (rf.phase_rel, rf.phase_off),
                 amp_shape: shape_lib.get(rf.mag_id, rf.time_id)?,
                 phase_shape: shape_lib.get(rf.phase_id, rf.time_id)?,
                 delay: rf.delay,
-                freq: rf.freq,
+                freq: (rf.freq_rel, rf.freq_off),
                 shim_shape: match rf.shim_id {
                     Some((mag_id, phase_id)) => {
                         Some((shape_lib.get(mag_id, 0)?, shape_lib.get(phase_id, 0)?))

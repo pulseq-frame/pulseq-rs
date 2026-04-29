@@ -46,7 +46,8 @@ fn main() -> anyhow::Result<()> {
     }
 
     if !cli.no_structured {
-        let seq = Sequence::from_parsed_file(sections).context("converting sections to sequence")?;
+        let seq =
+            Sequence::from_parsed_file(sections).context("converting sections to sequence")?;
         let html = viewer::structured::render(&cli.input, &seq);
         write_and_maybe_open(&cli, "structured", &html)?;
     }
@@ -66,11 +67,9 @@ fn write_and_maybe_open(cli: &Cli, suffix: &str, html: &str) -> anyhow::Result<(
 fn output_path(cli: &Cli, suffix: &str) -> PathBuf {
     match &cli.output {
         Some(path) => insert_suffix(path, suffix),
-        None => std::env::temp_dir().join(format!(
-            "pulseq-rs-{}-{}.html",
-            std::process::id(),
-            suffix
-        )),
+        None => {
+            std::env::temp_dir().join(format!("pulseq-rs-{}-{}.html", std::process::id(), suffix))
+        }
     }
 }
 
@@ -79,9 +78,6 @@ fn insert_suffix(path: &Path, suffix: &str) -> PathBuf {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("output");
-    let ext = path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("html");
+    let ext = path.extension().and_then(|s| s.to_str()).unwrap_or("html");
     path.with_file_name(format!("{stem}-{suffix}.{ext}"))
 }

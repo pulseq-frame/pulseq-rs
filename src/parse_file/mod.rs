@@ -6,6 +6,7 @@ mod helpers;
 mod pulseq_1_2;
 mod pulseq_1_3;
 mod pulseq_1_4;
+mod pulseq_1_5;
 
 // Pulseq is parsed into the following structs, which are modelled after the
 // newest supported pulseq version. Older versions need to convert the data.
@@ -43,6 +44,9 @@ pub fn parse_file(source: &str) -> Result<Vec<Section>, error::ParseError> {
         Version {
             major: 1, minor: 4, ..
         } => Ok(pulseq_1_4::file.parse(source)?),
+        Version {
+            major: 1, minor: 5, ..
+        } => Ok(pulseq_1_5::file.parse(source)?),
         _ => Err(error::ParseError::UnsupportedVersion(version)),
     }
 }
@@ -116,11 +120,17 @@ pub struct Rf {
     pub phase_id: u32,
     pub time_id: u32,
     /// `s` (from pulseq: `us`)
+    pub center: Option<f64>,
+    /// `s` (from pulseq: `us`)
     pub delay: f64,
-    /// `Hz`
-    pub freq: f64,
-    /// `rad`
-    pub phase: f64,
+    /// relative to system frequency
+    pub freq_rel: f64,
+    /// offset to system frequency
+    pub phase_rel: f64,
+    /// `Hz` (offset to system frequency)
+    pub freq_off: f64,
+    /// `rad` (offset to system frequency)
+    pub phase_off: f64,
     /// shim_mag_ID, shim_phase_ID
     pub shim_id: Option<(u32, u32)>,
 }
