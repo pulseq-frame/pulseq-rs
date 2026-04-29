@@ -55,6 +55,7 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
         name,
         fov,
         defs,
+        required_exts,
         time_raster,
     } = convert_defs(
         &version,
@@ -63,6 +64,14 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
             .flatten()
             .collect(),
     )?;
+
+    for ext in required_exts {
+        match ext.as_str() {
+            "label" | "labelset" | "labelinc" | "triggers" | "delays" | "rotations"
+            | "rf_shims" => (),
+            _ => panic!("unsupported required extension: '{ext}'"),
+        }
+    }
 
     let mut shape_lib = ShapeLib::new(convert_sec(
         SectionType::Shapes,
@@ -164,6 +173,8 @@ struct Defs {
     name: Option<String>,
     fov: Option<(f64, f64, f64)>,
     time_raster: TimeRaster,
+    /// lower-cased strings from "RequiredExtensions" definition
+    required_exts: Vec<String>,
     defs: HashMap<String, String>,
 }
 
@@ -175,21 +186,23 @@ fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, 
         return Err(ConversionError::NonUniqueDefinition);
     }
 
+    // Supported since pulseq 1.5 but earlier versions should not accidentally export this
+    let required_exts: Vec<String> = defs
+        .remove("RequiredExtensions")
+        .unwrap_or(String::new())
+        .split_whitespace()
+        .map(|s| s.trim().to_lowercase())
+        .collect();
+
     // Before 1.4, there is no spec on what's inside of a definition, so we
     // just directly return. Raster times are not exported by older exporters,
     // so we don't need to waste time trying to parse them.
-    if !matches!(
-        version,
-        Version {
-            major: 1,
-            minor: 4,
-            ..
-        }
-    ) {
+    if version.major == 1 && version.minor < 4 {
         return Ok(Defs {
             name: None,
             fov: None,
             time_raster: TimeRaster::default(),
+            required_exts,
             defs,
         });
     }
@@ -219,6 +232,7 @@ fn convert_defs(version: &Version, defs: Vec<(String, String)>) -> Result<Defs, 
         name,
         fov,
         time_raster,
+        required_exts,
         defs,
     })
 }
