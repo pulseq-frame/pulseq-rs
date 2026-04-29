@@ -102,6 +102,8 @@ pub fn from_raw(mut sections: Vec<Section>) -> Result<Sequence, ConversionError>
                 amp_shape: shape_lib.get(rf.mag_id, rf.time_id)?,
                 phase_shape: shape_lib.get(rf.phase_id, rf.time_id)?,
                 delay: rf.delay,
+                // TODO: calc from shape if not set
+                center: rf.center.unwrap_or(-1.0),
                 freq: (rf.freq_rel, rf.freq_off),
                 shim_shape: match rf.shim_id {
                     Some((mag_id, phase_id)) => {

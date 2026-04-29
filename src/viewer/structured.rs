@@ -174,6 +174,7 @@ fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> Markup {
                 li { strong { "amp" } (rf.amp) " Hz" }
                 li { strong { "phase" } (rf.phase.0) "×λ + " (rf.phase.1) " rad" }
                 li { strong { "delay" } (fmt_seconds(rf.delay)) }
+                li { strong { "center" } (fmt_seconds(rf.center)) }
                 li { strong { "freq" } (rf.freq.0) "×λ + " (rf.freq.1) " Hz" }
                 li { strong { "amp shape" } (render_shape_link(&rf.amp_shape, counters)) }
                 li { strong { "phase shape" } (render_shape_link(&rf.phase_shape, counters)) }

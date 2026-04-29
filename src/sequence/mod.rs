@@ -135,6 +135,8 @@ pub struct Rf {
     pub phase: (f64, f64),
     /// Unit: `[s]`
     pub delay: f64,
+    /// Unit: `[s]`
+    pub center: f64,
     /// (rel_to_larmor, offset) - Unit: (`[Hz/Hz]`, `[Hz]`)
     pub freq: (f64, f64),
     // Shapes
