@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use maud::{Markup, PreEscaped, html};
-use pulseq_rs::raw::{BlockDuration, Extensions, Section, Shape, Signature, Version};
+use pulseq_rs::raw::{BlockDuration, Section, Shape, Signature, Version};
 
 use crate::viewer::{empty_section, json_floats, page};
 
@@ -131,7 +131,40 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                     ));
                 }
             }
-            Section::Extensions(e) => populate_extensions(&mut ext_refs, &mut ext_specs, e),
+            Section::ExtensionRefs(rs) => {
+                for r in rs {
+                    let obj = if r.obj_id == 0 {
+                        text("0")
+                    } else {
+                        html! { a href=(format!("#ext-obj-{}-{}", r.spec_id, r.obj_id)) { (r.obj_id) } }
+                    };
+                    ext_refs.push((
+                        r.id.to_string(),
+                        [
+                            text(r.id.to_string()),
+                            id_ref("ext-spec", r.spec_id),
+                            obj,
+                            id_ref("ext-ref", r.next),
+                        ],
+                    ));
+                }
+            }
+            Section::ExtensionSpecs(ss) => {
+                for spec in ss {
+                    let mut rows: Vec<(String, [Markup; 2])> = Vec::new();
+                    for obj in &spec.instances {
+                        rows.push((
+                            obj.id.to_string(),
+                            [text(obj.id.to_string()), text(&obj.data)],
+                        ));
+                    }
+                    ext_specs.push(ExtSpec {
+                        spec_id: spec.id,
+                        name: spec.name.clone(),
+                        rows,
+                    });
+                }
+            }
             Section::Shapes(sh) => shapes = sh,
         }
     }
@@ -258,44 +291,6 @@ struct ExtSpec {
     spec_id: u32,
     name: String,
     rows: Vec<(String, [Markup; 2])>,
-}
-
-fn populate_extensions(
-    ext_refs: &mut Vec<(String, [Markup; 4])>,
-    ext_specs: &mut Vec<ExtSpec>,
-    ext: &Extensions,
-) {
-    for r in &ext.refs {
-        let obj = if r.obj_id == 0 {
-            text("0")
-        } else {
-            html! { a href=(format!("#ext-obj-{}-{}", r.spec_id, r.obj_id)) { (r.obj_id) } }
-        };
-        ext_refs.push((
-            r.id.to_string(),
-            [
-                text(r.id.to_string()),
-                id_ref("ext-spec", r.spec_id),
-                obj,
-                id_ref("ext-ref", r.next),
-            ],
-        ));
-    }
-
-    for spec in &ext.specs {
-        let mut rows: Vec<(String, [Markup; 2])> = Vec::new();
-        for obj in &spec.instances {
-            rows.push((
-                obj.id.to_string(),
-                [text(obj.id.to_string()), text(&obj.data)],
-            ));
-        }
-        ext_specs.push(ExtSpec {
-            spec_id: spec.id,
-            name: spec.name.clone(),
-            rows,
-        });
-    }
 }
 
 fn render_ext_spec(spec: &ExtSpec) -> Markup {

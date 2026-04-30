@@ -18,7 +18,9 @@ pub trait SectionData {
     fn can_extract(sec: &raw::Section) -> bool;
 
     /// panics if sec has the wrong type - check with can_extract first!
-    fn extract(sec: raw::Section) -> Vec<Self> where Self: Sized;
+    fn extract(sec: raw::Section) -> Vec<Self>
+    where
+        Self: Sized;
 }
 
 /// Generates a `SectionData` impl for a variant carrying `Vec<T>`.
@@ -67,7 +69,6 @@ macro_rules! impl_section_data_single {
 
 impl_section_data_single!(raw::Version, Version);
 impl_section_data_single!(raw::Signature, Signature);
-impl_section_data_single!(raw::Extensions, Extensions);
 impl_section_data_vec!((String, String), Definitions);
 impl_section_data_vec!(raw::Block, Blocks);
 impl_section_data_vec!(raw::Rf, Rfs);
@@ -75,4 +76,6 @@ impl_section_data_vec!(raw::Gradient, Gradients);
 impl_section_data_vec!(raw::Trap, Traps);
 impl_section_data_vec!(raw::Adc, Adcs);
 impl_section_data_vec!(raw::Delay, Delays);
+impl_section_data_vec!(raw::ExtensionRef, ExtensionRefs);
+impl_section_data_vec!(raw::ExtensionSpec, ExtensionSpecs);
 impl_section_data_vec!(raw::Shape, Shapes);

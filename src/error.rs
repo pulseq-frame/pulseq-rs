@@ -44,7 +44,9 @@ pub enum ValidationError {
         dur: f64,
         block_dur: f64,
     },
-    #[error("{ty} in block #{block_id} uses shapes with different sample counts: {length_1} vs {length_2}")]
+    #[error(
+        "{ty} in block #{block_id} uses shapes with different sample counts: {length_1} vs {length_2}"
+    )]
     ShapeMismatch {
         ty: EventType,
         block_id: u32,
@@ -94,7 +96,8 @@ pub enum SectionType {
     Traps,
     Adcs,
     Delays,
-    Extensions,
+    ExtensionRefs,
+    ExtensionSpecs,
     Shapes,
 }
 
@@ -110,7 +113,8 @@ impl Display for SectionType {
             SectionType::Traps => "Traps",
             SectionType::Adcs => "Adcs",
             SectionType::Delays => "Delays",
-            SectionType::Extensions => "Extensions",
+            SectionType::ExtensionRefs => "ExtensionRefs",
+            SectionType::ExtensionSpecs => "ExtensionSpecs",
             SectionType::Shapes => "Shapes",
         }
         .fmt(f)
@@ -127,11 +131,11 @@ pub enum ParseFovError {
 
 #[derive(Error, Debug)]
 pub enum MissingDefinition {
-    #[error(
-        "Pulseq since 1.4 mandates time raster definitions, but is GradientRasterTime missing"
-    )]
+    #[error("Pulseq since 1.4 mandates time raster definitions, but is GradientRasterTime missing")]
     GradientRasterTime,
-    #[error("Pulseq since 1.4 mandates time raster definitions, but is RadiofrequencyRasterTime missing")]
+    #[error(
+        "Pulseq since 1.4 mandates time raster definitions, but is RadiofrequencyRasterTime missing"
+    )]
     RadiofrequencyRasterTime,
     #[error("Pulseq since 1.4 mandates time raster definitions, but is AdcRasterTime missing")]
     AdcRasterTime,

@@ -62,7 +62,8 @@ pub enum Section {
     Traps(Vec<Trap>),
     Adcs(Vec<Adc>),
     Delays(Vec<Delay>),
-    Extensions(Extensions),
+    ExtensionRefs(Vec<ExtensionRef>),
+    ExtensionSpecs(Vec<ExtensionSpec>),
     Shapes(Vec<Shape>),
 }
 
@@ -188,12 +189,6 @@ pub struct Delay {
     pub id: u32,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
-}
-
-#[derive(Debug)]
-pub struct Extensions {
-    pub refs: Vec<ExtensionRef>,
-    pub specs: Vec<ExtensionSpec>,
 }
 
 #[derive(Debug, Clone, Copy)]

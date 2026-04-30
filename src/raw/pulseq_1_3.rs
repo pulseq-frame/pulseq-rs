@@ -21,7 +21,8 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
                 adcs.map(Section::Adcs),
                 delays.map(Section::Delays),
                 alt((
-                    extensions.map(Section::Extensions),
+                    extension_refs.map(Section::ExtensionRefs),
+                    extension_specs.map(Section::ExtensionSpecs),
                     shapes.map(Section::Shapes),
                 )),
             )),
@@ -49,27 +50,38 @@ pub fn blocks(input: &mut &str) -> ModalResult<Vec<Block>> {
         .parse_next(input)
 }
 
-pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
-    // [EXTENSIONS] section is a table where each line is a entry
-    // `ExtensionRef` defined by 4 numbers: "<id> <type> <ref> <next>""
-    //
-    // it is followed by the specification of the extensions
-    // `ExtensionSpec` is defined by "extension <STRING_ID> <type>"
-    //
-    // each extension (labels, triggers etc) is followed by a list of instances
-    // `ExtensionObject` is a single line, <id> + extension specific data
+// [EXTENSIONS] section format:
+//
+// `ExtensionRef` defined by 4 numbers: "<id> <type> <ref> <next>"
+// (introduced by the `[EXTENSIONS]` header).
+//
+// Followed by extension specifications. Each `ExtensionSpec` starts with
+// `extension <STRING_ID> <type>` and is followed by a list of `ExtensionObject`
+// instances - one line, `<id>` + extension specific data.
+//
+// In the spec all refs of one [EXTENSIONS] block come before all specs of that
+// block, but we don't enforce that here: refs are parsed by `extension_refs`
+// (anchored on the [EXTENSIONS] header), and each `extension <NAME> <ID>` block
+// is parsed independently by `extension_specs`. The downstream conversion
+// merges them via the SectionData pipeline, so interleaved or repeated blocks
+// just concatenate.
 
-    let ext_ref = || {
-        seq! { ExtensionRef {
-            id: int,
-            spec_id: cut_err(int),
-            obj_id: cut_err(int),
-            next: cut_err(int),
-            _: cut_err(nl),
-        }}
-        .context(StrContext::Label("extension reference"))
-    };
+pub fn extension_refs(input: &mut &str) -> ModalResult<Vec<ExtensionRef>> {
+    let ext_ref = seq! { ExtensionRef {
+        id: int,
+        spec_id: cut_err(int),
+        obj_id: cut_err(int),
+        next: cut_err(int),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("extension reference"));
 
+    preceded(tag_nl("[EXTENSIONS]"), repeat(0.., ext_ref))
+        .context(StrContext::Label("[EXTENSIONS] section"))
+        .parse_next(input)
+}
+
+pub fn extension_specs(input: &mut &str) -> ModalResult<Vec<ExtensionSpec>> {
     let ext_obj = || {
         seq! { ExtensionObject {
             id: int,
@@ -79,22 +91,16 @@ pub fn extensions(input: &mut &str) -> ModalResult<Extensions> {
         .context(StrContext::Label("extension object"))
     };
 
-    let ext_spec = move || {
-        seq! { ExtensionSpec {
-            _: tag_ws("extension"),
-            name: cut_err(ident),
-            id: cut_err(int),
-            _: cut_err(nl),
-            instances: cut_err(repeat(1.., ext_obj())),
-        }}
-        .context(StrContext::Label("extension specification"))
-    };
-
-    seq! { Extensions {
-        _: tag_nl("[EXTENSIONS]"),
-        refs: repeat(0.., ext_ref()),
-        specs: repeat(0.., ext_spec()),
+    let ext_spec = seq! { ExtensionSpec {
+        _: tag_ws("extension"),
+        name: cut_err(ident),
+        id: cut_err(int),
+        _: cut_err(nl),
+        instances: cut_err(repeat(1.., ext_obj())),
     }}
-    .context(StrContext::Label("[EXTENSIONS] section"))
-    .parse_next(input)
+    .context(StrContext::Label("extension specification"));
+
+    repeat(1.., ext_spec)
+        .context(StrContext::Label("extension specifications"))
+        .parse_next(input)
 }

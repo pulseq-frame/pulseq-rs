@@ -4,7 +4,7 @@ use winnow::error::StrContext;
 use winnow::prelude::*;
 
 use super::pulseq_1_2::{adcs, definitions, shapes, traps, version};
-use super::pulseq_1_3::extensions;
+use super::pulseq_1_3::{extension_refs, extension_specs};
 use super::{helpers::*, *};
 
 pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
@@ -20,8 +20,9 @@ pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
                 gradients.map(Section::Gradients),
                 traps.map(Section::Traps),
                 adcs.map(Section::Adcs),
-                extensions.map(Section::Extensions),
                 alt((
+                    extension_refs.map(Section::ExtensionRefs),
+                    extension_specs.map(Section::ExtensionSpecs),
                     shapes.map(Section::Shapes),
                     signature.map(Section::Signature),
                 )),

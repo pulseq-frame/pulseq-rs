@@ -102,14 +102,9 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
         return Err(ConversionError::GradTrapIdReuse);
     }
 
-    // TODO: this could be more in-line if the raw file would not contain
-    // a single ext object but instead a vec of exts and a vec of specs
-    let exts: Vec<raw::Extensions> = get_section_data(&mut sections);
-    let exts = match exts.as_slice() {
-        [] => HashMap::new(),
-        [exts] => convert_exts(exts),
-        [..] => unimplemented!(),
-    };
+    let ext_refs: Vec<raw::ExtensionRef> = get_section_data(&mut sections);
+    let ext_specs: Vec<raw::ExtensionSpec> = get_section_data(&mut sections);
+    let exts = convert_exts(ext_refs, ext_specs);
 
     // We do not use map_section_data here since we do not care about block ids
     let blocks = get_section_data(&mut sections)
@@ -171,20 +166,24 @@ where
 }
 
 /// Very rough impl just to get something going- values are (ext_name, obj_data)
-fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<seq::Extension>> {
+fn convert_exts(
+    ext_refs: Vec<raw::ExtensionRef>,
+    ext_specs: Vec<raw::ExtensionSpec>,
+) -> HashMap<u32, Vec<seq::Extension>> {
     // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
-    let specs: HashMap<(u32, u32), seq::Extension> = exts
-        .specs
+    let specs: HashMap<(u32, u32), seq::Extension> = ext_specs
         .iter()
         .flat_map(|spec| {
-            spec.instances
-                .iter()
-                .map(|obj| ((spec.id, obj.id), seq::Extension::parse(&spec.name, &obj.data)))
+            spec.instances.iter().map(|obj| {
+                (
+                    (spec.id, obj.id),
+                    seq::Extension::parse(&spec.name, &obj.data),
+                )
+            })
         })
         .collect();
 
-    let refs: HashMap<u32, raw::ExtensionRef> =
-        exts.refs.iter().map(|ext| (ext.id, *ext)).collect();
+    let refs: HashMap<u32, raw::ExtensionRef> = ext_refs.iter().map(|ext| (ext.id, *ext)).collect();
 
     fn walk_linked_ref_list(
         refs: &HashMap<u32, raw::ExtensionRef>,
@@ -206,7 +205,7 @@ fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<seq::Extension>> {
     }
 
     let mut parsed = HashMap::new();
-    for ext_ref in &exts.refs {
+    for ext_ref in &ext_refs {
         parsed.insert(ext_ref.id, walk_linked_ref_list(&refs, ext_ref.id, &specs));
     }
     parsed

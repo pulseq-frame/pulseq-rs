@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_complex::Complex64;
 
-use crate::{seq::ComplexShape, seq::Shape, error::ConversionError};
+use crate::{error::ConversionError, seq::ComplexShape, seq::Shape};
 
 pub struct ShapeLib {
     shapes: HashMap<u32, Arc<Shape>>,
