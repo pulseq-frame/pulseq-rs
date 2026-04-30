@@ -48,7 +48,18 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
         phase_off: cut_err(float),
         // pulseq 1.5 uses the shim extension instead of Martins modification
         shim_id: empty.value(None),
-        rf_use: cut_err(preceded(ws, one_of(['e', 'r', 'i', 's', 'p', 'o', 'u']))),
+        rf_use: cut_err(preceded(ws, one_of(['e', 'r', 'i', 's', 'p', 'o', 'u']))).map(
+            |c| match c {
+                'e' => RfUse::Excitation,
+                'r' => RfUse::Refocusing,
+                'i' => RfUse::Inversion,
+                's' => RfUse::Saturation,
+                'p' => RfUse::Preparation,
+                'o' => RfUse::Other,
+                'u' => RfUse::Undefined,
+                _ => unreachable!("one_of restricts to listed chars"),
+            },
+        ),
         _: cut_err(nl),
     }}
     .context(StrContext::Label("rf record"));

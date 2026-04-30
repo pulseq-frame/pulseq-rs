@@ -134,8 +134,33 @@ pub struct Rf {
     pub phase_off: f64,
     /// shim_mag_ID, shim_phase_ID
     pub shim_id: Option<(u32, u32)>,
-    /// use - initial char of use identifier
-    pub rf_use: char,
+    /// use - parsed from initial char of use identifier
+    pub rf_use: RfUse,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RfUse {
+    Excitation,
+    Refocusing,
+    Inversion,
+    Saturation,
+    Preparation,
+    Other,
+    Undefined,
+}
+
+impl Display for RfUse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            RfUse::Excitation => "Excitation",
+            RfUse::Refocusing => "Refocusing",
+            RfUse::Inversion => "Inversion",
+            RfUse::Saturation => "Saturation",
+            RfUse::Preparation => "Preparation",
+            RfUse::Other => "Other",
+            RfUse::Undefined => "Undefined",
+        })
+    }
 }
 
 #[derive(Debug)]

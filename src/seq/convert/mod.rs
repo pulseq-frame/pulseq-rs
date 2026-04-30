@@ -66,7 +66,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
                 center,
                 freq: (rf.freq_rel, rf.freq_off),
                 shim_shape,
-                rf_use: seq::RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
+                rf_use: rf.rf_use,
             }),
         ))
     })?;

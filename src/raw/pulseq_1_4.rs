@@ -90,7 +90,7 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
             Some((0, 0)) => None,
             _ => s,
         }),
-        rf_use: empty.value('u'), // undefined use
+        rf_use: empty.value(RfUse::Undefined),
         _: cut_err(nl),
     }}
     .context(StrContext::Label("rf record"));
