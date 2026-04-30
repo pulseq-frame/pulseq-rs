@@ -104,7 +104,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
 
     let ext_refs: Vec<raw::ExtensionRef> = get_section_data(&mut sections);
     let ext_specs: Vec<raw::ExtensionSpec> = get_section_data(&mut sections);
-    let exts = convert_exts(ext_refs, ext_specs);
+    let exts = convert_exts(ext_refs, ext_specs)?;
 
     // We do not use map_section_data here since we do not care about block ids
     let blocks = get_section_data(&mut sections)
@@ -136,7 +136,7 @@ fn check_ext_support(required: &[String]) -> Result<(), ConversionError> {
         match ext.as_str() {
             "label" | "labelset" | "labelinc" | "triggers" | "delays" | "rotations"
             | "rf_shims" => (),
-            _ => panic!("unsupported required extension: '{ext}'"),
+            _ => return Err(ConversionError::UnsupportedExtension(ext.to_owned())),
         }
     }
     Ok(())
@@ -169,19 +169,16 @@ where
 fn convert_exts(
     ext_refs: Vec<raw::ExtensionRef>,
     ext_specs: Vec<raw::ExtensionSpec>,
-) -> HashMap<u32, Vec<seq::Extension>> {
+) -> Result<HashMap<u32, Vec<seq::Extension>>, ConversionError> {
     // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
     let specs: HashMap<(u32, u32), seq::Extension> = ext_specs
         .iter()
         .flat_map(|spec| {
             spec.instances.iter().map(|obj| {
-                (
-                    (spec.id, obj.id),
-                    seq::Extension::parse(&spec.name, &obj.data),
-                )
+                seq::Extension::parse(&spec.name, &obj.data).map(|ext| ((spec.id, obj.id), ext))
             })
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     let refs: HashMap<u32, raw::ExtensionRef> = ext_refs.iter().map(|ext| (ext.id, *ext)).collect();
 
@@ -208,7 +205,7 @@ fn convert_exts(
     for ext_ref in &ext_refs {
         parsed.insert(ext_ref.id, walk_linked_ref_list(&refs, ext_ref.id, &specs));
     }
-    parsed
+    Ok(parsed)
 }
 
 fn convert_block(
@@ -263,7 +260,9 @@ fn convert_block(
 
     // TODO: add Ext event type in error (see code above) to return error instead of unwrapping
     let ext = if block.ext != 0 {
-        exts.get(&block.ext).cloned().unwrap()
+        exts.get(&block.ext)
+            .cloned()
+            .ok_or(ConversionError::InvalidExtensionRef { id: block.ext })?
     } else {
         Vec::new()
     };

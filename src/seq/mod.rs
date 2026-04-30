@@ -159,8 +159,7 @@ impl ComplexShape {
             .iter()
             .enumerate()
             .max_by(|a, b| a.1.norm().total_cmp(&b.1.norm()))
-            .map(|(i, _)| i)
-            .unwrap()
+            .map_or(0, |(i, _)| i)
     }
 }
 

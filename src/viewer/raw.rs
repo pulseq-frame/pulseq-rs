@@ -169,6 +169,11 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         }
     }
 
+    let version = match version {
+        Some(v) => v,
+        None => unreachable!("Bug: parsing fails without [VERSION]"),
+    };
+
     let body = html! {
         nav {
             a href="#definitions" { "Definitions" }
@@ -183,7 +188,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
         }
 
         h1 { (title) }
-        p.meta { (render_meta(version.expect("version section (parsing fails without)"), signature)) }
+        p.meta { (render_meta(version, signature)) }
 
         section id="definitions" { h2 { "Definitions" } (table("definitions", ["key", "value"], &definitions)) }
         section id="blocks" { h2 { "Blocks" }

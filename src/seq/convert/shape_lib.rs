@@ -101,6 +101,8 @@ impl ShapeLib {
 /// implementing time shape expansion right now.
 /// In addition, we use linar interpolation (as it seems to be expected when using
 /// this feature for trap grads). The spec does not say anything about interpolation at all.
+/// 
+/// TODO: check if this actually correct and how interpreters expect it.
 fn expand_shape(shape: &Arc<Shape>, time: &Arc<Shape>) -> Result<Shape, ConversionError> {
     if shape.0.len() != time.0.len() {
         return Err(ConversionError::TimeShapeMismatch {
@@ -114,9 +116,12 @@ fn expand_shape(shape: &Arc<Shape>, time: &Arc<Shape>) -> Result<Shape, Conversi
         return Ok(Shape(Vec::new()));
     }
 
-    // Check if numbers in this shape are all integer, then convert to integers
+    // Convert time shape to integers (after a check if that's okay)
     if time.0.iter().any(|x| x.fract() != 0.0) {
         return Err(ConversionError::TimeShapeNonInteger);
+    }
+    if time.0.iter().any(|x| *x < 0.0) {
+        return Err(ConversionError::TimeShapeNegative);
     }
     let time: Vec<_> = time.0.iter().map(|x| *x as u32).collect();
 
@@ -125,7 +130,7 @@ fn expand_shape(shape: &Arc<Shape>, time: &Arc<Shape>) -> Result<Shape, Conversi
     let mut amp = shape.0[0];
 
     for (len, &next_amp) in time.into_iter().zip(shape.0.iter()) {
-        // If we are suddenly too long, time shape is not striclty increasing
+        // If we are suddenly too long, time shape is not strictly increasing
         if expanded.len() > len as usize {
             return Err(ConversionError::TimeShapeNonIncreasing);
         }

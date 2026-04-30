@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::error::ExtensionError;
+
 #[derive(Clone)]
 pub enum Extension {
     /// Extension not supported by pulseq-rs. Raw data is stored.
@@ -37,7 +39,7 @@ pub enum Extension {
 }
 
 impl Extension {
-    pub fn parse(string_id: &str, data: &str) -> Self {
+    pub fn parse(string_id: &str, data: &str) -> Result<Self, ExtensionError> {
         match string_id.to_lowercase().as_str() {
             "labelset" => parse_labelset(data),
             "labelinc" => parse_labelinc(data),
@@ -45,44 +47,89 @@ impl Extension {
             "delays" => parse_delay(data),
             "rotations" => parse_rotation(data),
             "rf_shims" => parse_shims(data),
-            _ => Self::Unsupported {
+            _ => Ok(Self::Unsupported {
                 string_id: string_id.to_owned(),
                 data: data.to_owned(),
-            },
+            }),
         }
     }
 }
 
-fn parse_shims(data: &str) -> Extension {
-    let mut part = data.split_whitespace().map(|s| s.trim());
-    let channel_count: u32 = part.next().expect("channel count").parse().unwrap();
-    let shim_values: Vec<f64> = part.map(|s| s.parse().unwrap()).collect();
-    assert_eq!(shim_values.len(), channel_count as usize * 2);
+fn parse_shims(data: &str) -> Result<Extension, ExtensionError> {
+    const EXT: &str = "rf_shims";
+    let mut parts = data.split_whitespace();
 
-    Extension::Shimming {
+    let channel_count: u32 = parts
+        .next()
+        .ok_or(ExtensionError::WrongFieldCount {
+            ext: EXT,
+            expected: 1,
+            got: 0,
+        })?
+        .parse()
+        .map_err(|source| ExtensionError::ParseInt { ext: EXT, source })?;
+
+    let shim_values: Vec<f64> = parts
+        .map(|s| {
+            s.parse::<f64>()
+                .map_err(|source| ExtensionError::ParseFloat { ext: EXT, source })
+        })
+        .collect::<Result<_, _>>()?;
+
+    let expected = (channel_count as usize) * 2;
+    if shim_values.len() != expected {
+        return Err(ExtensionError::ShimCountMismatch {
+            declared: channel_count,
+            got: shim_values.len(),
+            expected,
+        });
+    }
+
+    Ok(Extension::Shimming {
         shim: shim_values
             .chunks_exact(2)
-            .map(|chunk| [chunk[0], chunk[1]])
+            .flat_map(<[f64; 2]>::try_from)
             .collect(),
-    }
+    })
 }
 
-fn parse_rotation(data: &str) -> Extension {
-    Extension::Rotation {
-        quat: data
-            .split_whitespace()
-            .map(|s| s.trim().parse::<f64>().unwrap())
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("rotation extension expects 4 floats"),
-    }
+fn parse_rotation(data: &str) -> Result<Extension, ExtensionError> {
+    const EXT: &str = "rotations";
+    let parts: Vec<f64> = data
+        .split_whitespace()
+        .map(|s| {
+            s.parse::<f64>()
+                .map_err(|source| ExtensionError::ParseFloat { ext: EXT, source })
+        })
+        .collect::<Result<_, _>>()?;
+
+    let quat: [f64; 4] = parts.try_into().map_err(|v: Vec<f64>| {
+        ExtensionError::WrongFieldCount {
+            ext: EXT,
+            expected: 4,
+            got: v.len(),
+        }
+    })?;
+
+    Ok(Extension::Rotation { quat })
 }
 
-// TODO: should return parsing errors instead of panicking
+fn parse_label_inner(
+    ext: &'static str,
+    data: &str,
+) -> Result<(i32, ExtLabelFlag), ExtensionError> {
+    let (value, flag) = data
+        .split_once(' ')
+        .ok_or(ExtensionError::WrongFieldCount {
+            ext,
+            expected: 2,
+            got: data.split_whitespace().count(),
+        })?;
 
-fn parse_label_inner(data: &str) -> (i32, ExtLabelFlag) {
-    let (value, flag) = data.split_once(' ').unwrap();
-    let value: i32 = value.trim().parse().unwrap();
+    let value: i32 = value
+        .trim()
+        .parse()
+        .map_err(|source| ExtensionError::ParseInt { ext, source })?;
 
     let flag = match flag.trim().to_uppercase().as_str() {
         "SLC" => ExtLabelFlag::Counter(ExtLabelCounter::Slc),
@@ -107,55 +154,70 @@ fn parse_label_inner(data: &str) -> (i32, ExtLabelFlag) {
         "NOSCL" => ExtLabelFlag::NoScl,
         "ONCE" => ExtLabelFlag::Once,
         "TRID" => ExtLabelFlag::Counter(ExtLabelCounter::Trid),
-        _ => panic!("Unsupported flag '{flag}'"),
+        other => return Err(ExtensionError::UnknownLabel(other.to_owned())),
     };
 
-    (value, flag)
+    Ok((value, flag))
 }
 
-fn parse_labelset(data: &str) -> Extension {
-    let (value, flag) = parse_label_inner(data);
-    Extension::LabelSet { flag, value }
+fn parse_labelset(data: &str) -> Result<Extension, ExtensionError> {
+    let (value, flag) = parse_label_inner("labelset", data)?;
+    Ok(Extension::LabelSet { flag, value })
 }
 
-fn parse_labelinc(data: &str) -> Extension {
-    let (value, flag) = parse_label_inner(data);
+fn parse_labelinc(data: &str) -> Result<Extension, ExtensionError> {
+    let (value, flag) = parse_label_inner("labelinc", data)?;
     let counter = match flag {
         ExtLabelFlag::Counter(counter) => counter,
-        flag => panic!("Cannot use 'LABELINC' on a flag ({flag:?}), only on counters"),
+        flag => return Err(ExtensionError::LabelIncNotCounter(flag.to_string())),
     };
-
-    Extension::LabelInc { counter, value }
+    Ok(Extension::LabelInc { counter, value })
 }
 
-fn parse_trigger(data: &str) -> Extension {
+fn parse_trigger(data: &str) -> Result<Extension, ExtensionError> {
+    const EXT: &str = "triggers";
     let parts: [&str; 4] = data
         .split_whitespace()
         .collect::<Vec<_>>()
         .try_into()
-        .expect("trigger extension expects 4 numbers");
+        .map_err(|v: Vec<&str>| ExtensionError::WrongFieldCount {
+            ext: EXT,
+            expected: 4,
+            got: v.len(),
+        })?;
 
-    Extension::Trigger {
-        typ: parts[0].parse().unwrap(),
-        channel: parts[1].parse().unwrap(),
-        delay: parts[2].parse::<f64>().unwrap() * 1e-6,
-        duration: parts[3].parse::<f64>().unwrap() * 1e-6,
-    }
+    let int_err = |source| ExtensionError::ParseInt { ext: EXT, source };
+    let float_err = |source| ExtensionError::ParseFloat { ext: EXT, source };
+
+    Ok(Extension::Trigger {
+        typ: parts[0].parse().map_err(int_err)?,
+        channel: parts[1].parse().map_err(int_err)?,
+        delay: parts[2].parse::<f64>().map_err(float_err)? * 1e-6,
+        duration: parts[3].parse::<f64>().map_err(float_err)? * 1e-6,
+    })
 }
 
-fn parse_delay(data: &str) -> Extension {
+fn parse_delay(data: &str) -> Result<Extension, ExtensionError> {
+    const EXT: &str = "delays";
     let parts: [&str; 4] = data
         .split_whitespace()
         .collect::<Vec<_>>()
         .try_into()
-        .expect("delay extension expects 4 fields: numeric_id t_offset t_factor text_id");
+        .map_err(|v: Vec<&str>| ExtensionError::WrongFieldCount {
+            ext: EXT,
+            expected: 4,
+            got: v.len(),
+        })?;
 
-    Extension::Delay {
-        numeric_id: parts[0].parse().unwrap(),
-        t_offset: parts[1].parse::<f64>().unwrap() * 1e-6,
-        t_factor: 1.0 / parts[2].parse::<f64>().unwrap(),
+    let int_err = |source| ExtensionError::ParseInt { ext: EXT, source };
+    let float_err = |source| ExtensionError::ParseFloat { ext: EXT, source };
+
+    Ok(Extension::Delay {
+        numeric_id: parts[0].parse().map_err(int_err)?,
+        t_offset: parts[1].parse::<f64>().map_err(float_err)? * 1e-6,
+        t_factor: 1.0 / parts[2].parse::<f64>().map_err(float_err)?,
         text_id: parts[3].to_owned(),
-    }
+    })
 }
 
 /// Labels and their descriptions taken from pypulseq - unknown labels throw an error.

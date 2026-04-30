@@ -19,6 +19,13 @@ open = { version = "5", optional = true }
 [features]
 viewer = ["dep:anyhow", "dep:clap", "dep:maud", "dep:open"]
 
+[lints.clippy]
+unwrap_used             = "warn"
+expect_used             = "warn"
+panic                   = "warn"
+indexing_slicing        = "warn"
+# arithmetic_side_effects = "warn"
+
 [[bin]]
 name = "pulseq-rs"
 required-features = ["viewer"]

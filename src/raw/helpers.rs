@@ -16,7 +16,7 @@ pub fn decompress_shape(
     let mut a = f64::NAN;
     let mut b = f64::NAN;
     // After a detected RLE, skip the RLE check for two samples
-    let mut skip = 0;
+    let mut skip: u32 = 0;
 
     for (index, sample) in samples.into_iter().enumerate() {
         if a == b && skip == 0 {
@@ -32,9 +32,7 @@ pub fn decompress_shape(
                 deriv.push(b);
             }
         } else {
-            if skip > 0 {
-                skip -= 1;
-            }
+            skip = skip.saturating_sub(1);
             deriv.push(sample);
         }
 

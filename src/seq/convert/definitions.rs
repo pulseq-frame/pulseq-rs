@@ -81,10 +81,10 @@ impl Defs {
 }
 
 fn parse_fov(s: String) -> Result<(f64, f64, f64), ParseFovError> {
-    let splits: Vec<_> = s.split_whitespace().collect();
-    if splits.len() != 3 {
-        Err(ParseFovError::WrongValueCount(splits.len()))
-    } else {
-        Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
-    }
+    let splits: Vec<&str> = s.split_whitespace().collect();
+    let splits: [&str; 3] = splits
+        .try_into()
+        .map_err(|vals: Vec<&str>| ParseFovError::WrongValueCount(vals.len()))?;
+
+    Ok((splits[0].parse()?, splits[1].parse()?, splits[2].parse()?))
 }

@@ -145,6 +145,40 @@ pub enum MissingDefinition {
     BlockDurationRaster,
 }
 
+#[derive(Error, Debug)]
+pub enum ExtensionError {
+    #[error("Extension '{ext}' expected {expected} field(s), got {got}")]
+    WrongFieldCount {
+        ext: &'static str,
+        expected: usize,
+        got: usize,
+    },
+    #[error("Extension '{ext}': failed to parse integer field: {source}")]
+    ParseInt {
+        ext: &'static str,
+        #[source]
+        source: std::num::ParseIntError,
+    },
+    #[error("Extension '{ext}': failed to parse float field: {source}")]
+    ParseFloat {
+        ext: &'static str,
+        #[source]
+        source: std::num::ParseFloatError,
+    },
+    #[error("Unknown label flag: '{0}'")]
+    UnknownLabel(String),
+    #[error("LABELINC requires a counter flag, got '{0}'")]
+    LabelIncNotCounter(String),
+    #[error(
+        "Shim extension declares {declared} channel(s), but data contains {got} float(s) (expected {expected})"
+    )]
+    ShimCountMismatch {
+        declared: u32,
+        got: usize,
+        expected: usize,
+    },
+}
+
 // TODO: Include shape IDs into shapes for better error reporting
 
 #[derive(Error, Debug)]
@@ -159,22 +193,30 @@ pub enum ConversionError {
     NonUniqueDefinition,
     #[error("Referenced {ty} with id {id} does not exist")]
     BrokenRef { ty: EventType, id: u32 },
+    #[error("Referenced extension with id {id} does not exist")]
+    InvalidExtensionRef { id: u32 },
     #[error(transparent)]
     MissingDefinition(#[from] MissingDefinition),
     #[error("Failed to parse FOV: {0}")]
     ParseFovError(#[from] ParseFovError),
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
+    #[error("Failed to parse extension data: {0}")]
+    ExtensionParseError(#[from] ExtensionError),
     #[error("Shape with index {0} does not exist")]
     ShapeNotFound(u32),
     #[error("Can't use 0 as shape index")]
     ShapeIndexZero,
     #[error("Used a shape of length {shape_len} together with a time shape of length {time_len}")]
     TimeShapeMismatch { shape_len: usize, time_len: usize },
+    #[error("Used a shape as time shape which contained negative values.")]
+    TimeShapeNegative,
     #[error("Used a shape as time shape which contained non-integer values.")]
     TimeShapeNonInteger,
     #[error("Used a shape as time shape which is not strictly increasing")]
     TimeShapeNonIncreasing,
+    #[error("Unsupported extension: '{0}'")]
+    UnsupportedExtension(String),
 }
 
 #[derive(Error)]
