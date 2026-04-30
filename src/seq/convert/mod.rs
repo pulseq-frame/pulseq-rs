@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use super::Sequence;
 use crate::{error::ConversionError, raw, seq};
@@ -165,13 +168,14 @@ where
     }
 }
 
-/// Very rough impl just to get something going- values are (ext_name, obj_data)
 fn convert_exts(
     ext_refs: Vec<raw::ExtensionRef>,
     ext_specs: Vec<raw::ExtensionSpec>,
 ) -> Result<HashMap<u32, Vec<seq::Extension>>, ConversionError> {
-    // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
-    let specs: HashMap<(u32, u32), seq::Extension> = ext_specs
+    // Convert list of extension specs (block of instances per extension type)
+    // into a flat map of specs (each carrying its extension type)
+    // and build a map with of parsed extensions with (spec_id, obj_id) as key
+    let ext_specs: HashMap<(u32, u32), seq::Extension> = ext_specs
         .iter()
         .flat_map(|spec| {
             spec.instances.iter().map(|obj| {
@@ -180,30 +184,51 @@ fn convert_exts(
         })
         .collect::<Result<_, _>>()?;
 
-    let refs: HashMap<u32, raw::ExtensionRef> = ext_refs.iter().map(|ext| (ext.id, *ext)).collect();
-
-    fn walk_linked_ref_list(
-        refs: &HashMap<u32, raw::ExtensionRef>,
-        mut ext_id: u32,
-        specs: &HashMap<(u32, u32), seq::Extension>,
-    ) -> Vec<seq::Extension> {
-        let mut tmp = Vec::new();
-        // max depth is 50 - hardcoded, maybe should add cycle detector or proper error return val
-        for _ in 0..50 {
-            let ext_ref = &refs[&ext_id];
-            tmp.push(specs[&(ext_ref.spec_id, ext_ref.obj_id)].clone());
-
-            ext_id = ext_ref.next;
-            if ext_id == 0 {
-                return tmp;
-            }
-        }
-        panic!("Max extension linked list depth (50) reached")
+    // Transform flat list of extension refs into a HashMap indexed by their id
+    let ext_ref_count = ext_refs.len();
+    let ext_refs: HashMap<u32, _> = ext_refs.iter().map(|ext| (ext.id, *ext)).collect();
+    if ext_refs.len() < ext_ref_count {
+        return Err(ConversionError::EventIdReuse(
+            raw::ExtensionRef::SECTION_TYPE,
+        ));
     }
 
-    let mut parsed = HashMap::new();
-    for ext_ref in &ext_refs {
-        parsed.insert(ext_ref.id, walk_linked_ref_list(&refs, ext_ref.id, &specs));
+    // Each ref starts a linked list of extensions, terminated by `next == 0`.
+    // Walk every chain, until the end is reached or a cycle detected.
+    // Build a HashMap with key=ref_id, value=Vec<Extension>
+    let mut parsed = HashMap::with_capacity(ext_refs.len());
+
+    for root_ref in ext_refs.values() {
+        // Keep a list of visited references - if we see one again we have a cycle
+        let mut visited: HashSet<u32> = HashSet::new();
+        // Convert the linked list of references into a Vec<Extensions>
+        let mut ext_list = Vec::new();
+
+        let mut ext_ref = root_ref;
+        loop {
+            // Return error on cycle
+            if !visited.insert(ext_ref.id) {
+                return Err(ConversionError::ExtensionRefCycle {
+                    start_id: root_ref.id,
+                });
+            }
+
+            // Convert the reference into a parsed extension and push to Vec
+            let ext = ext_specs
+                .get(&(ext_ref.spec_id, ext_ref.obj_id))
+                .ok_or(ConversionError::InvalidExtensionRef { id: ext_ref.id })?;
+            ext_list.push(ext.clone());
+
+            // Break on end-of-linked-list
+            if ext_ref.next == 0 {
+                break;
+            }
+            // Otherwise move on to next element
+            ext_ref = ext_refs
+                .get(&ext_ref.next)
+                .ok_or(ConversionError::InvalidExtensionRef { id: ext_ref.next })?;
+        }
+        parsed.insert(root_ref.id, ext_list);
     }
     Ok(parsed)
 }

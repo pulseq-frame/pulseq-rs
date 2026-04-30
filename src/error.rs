@@ -195,6 +195,8 @@ pub enum ConversionError {
     BrokenRef { ty: EventType, id: u32 },
     #[error("Referenced extension with id {id} does not exist")]
     InvalidExtensionRef { id: u32 },
+    #[error("Extension ref chain starting at id {start_id} contains a cycle")]
+    ExtensionRefCycle { start_id: u32 },
     #[error(transparent)]
     MissingDefinition(#[from] MissingDefinition),
     #[error("Failed to parse FOV: {0}")]
