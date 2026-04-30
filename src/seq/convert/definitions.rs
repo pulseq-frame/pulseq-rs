@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    TimeRaster,
     error::{ConversionError, MissingDefinition, ParseFovError},
-    raw,
+    raw, seq,
 };
 
 /// Simple helper struct to parse definitions into - might be removed after some
@@ -11,7 +10,7 @@ use crate::{
 pub struct Defs {
     pub name: Option<String>,
     pub fov: Option<(f64, f64, f64)>,
-    pub time_raster: TimeRaster,
+    pub time_raster: seq::TimeRaster,
     /// lower-cased strings from "RequiredExtensions" definition
     pub required_exts: Vec<String>,
     pub defs: HashMap<String, String>,
@@ -44,13 +43,13 @@ impl Defs {
             return Ok(Defs {
                 name: None,
                 fov: None,
-                time_raster: TimeRaster::default(),
+                time_raster: seq::TimeRaster::default(),
                 required_exts,
                 defs,
             });
         }
 
-        let time_raster = TimeRaster {
+        let time_raster = seq::TimeRaster {
             grad: defs
                 .remove("GradientRasterTime")
                 .ok_or(MissingDefinition::GradientRasterTime)?

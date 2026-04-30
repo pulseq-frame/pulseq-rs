@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use maud::{Markup, PreEscaped, html};
-use pulseq_rs::{Adc, Block, ComplexShape, Extension, Gradient, Rf, Sequence, Shape};
+use pulseq_rs::seq::{Adc, Block, ComplexShape, Extension, Gradient, Rf, Sequence, Shape};
 
 use crate::viewer::{fmt_seconds, json_floats, page};
 

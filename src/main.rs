@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Context;
 use clap::Parser;
-use pulseq_rs::Sequence;
+use pulseq_rs::seq::Sequence;
 
 mod viewer;
 
@@ -38,7 +38,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let source =
         fs::read_to_string(&cli.input).context(format!("reading {}", cli.input.display()))?;
-    let sections = pulseq_rs::parse_file(&source).context("parsing input")?;
+    let sections = pulseq_rs::raw::parse_file(&source).context("parsing input")?;
 
     if !cli.no_raw {
         let html = viewer::raw::render(&cli.input, &sections);

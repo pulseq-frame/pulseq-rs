@@ -5,7 +5,7 @@ use num_complex::Complex64;
 
 use crate::{
     error::{self, EventType, ValidationError},
-    parse_file::{self, Section},
+    raw::{self, Section},
 };
 
 mod convert;
@@ -30,7 +30,7 @@ impl Sequence {
     }
 
     pub fn from_source(source: &str) -> Result<Self, error::Error> {
-        Self::from_parsed_file(parse_file::parse_file(source)?)
+        Self::from_parsed_file(raw::parse_file(source)?)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, error::Error> {

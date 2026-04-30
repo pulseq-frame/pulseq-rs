@@ -1,4 +1,4 @@
-use pulseq_rs::Sequence;
+use pulseq_rs::seq::Sequence;
 
 #[test]
 /// A 1.4 + pTx extension file that uses shape ID 0 for the shim (default shim)

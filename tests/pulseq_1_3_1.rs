@@ -1,4 +1,4 @@
-use pulseq_rs::Sequence;
+use pulseq_rs::seq::Sequence;
 
 #[test]
 fn epi_se_rs() {

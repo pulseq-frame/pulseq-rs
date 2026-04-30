@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use crate::parse_file::Version;
+use crate::raw::Version;
 use thiserror::Error;
 
 #[derive(Error, Debug)]

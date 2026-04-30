@@ -1,4 +1,4 @@
-use pulseq_rs::Sequence;
+use pulseq_rs::seq::Sequence;
 use std::fs::File;
 use std::io::Write;
 

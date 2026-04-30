@@ -1,10 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use super::Sequence;
-use crate::{
-    Adc, Block, Extension, Gradient, Rf, Shape, TimeRaster, error::ConversionError, raw,
-    sequence::RfUse,
-};
+use crate::{error::ConversionError, raw, seq};
 
 mod definitions;
 mod sections;
@@ -23,7 +20,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     check_ext_support(&defs.required_exts)?;
 
     let mut shapes = ShapeLib::new(map_section_data(&mut sections, |shape: raw::Shape| {
-        Ok((shape.id, Arc::new(Shape(shape.samples))))
+        Ok((shape.id, Arc::new(seq::Shape(shape.samples))))
     })?)?;
 
     let delays = map_section_data(&mut sections, |delay: raw::Delay| {
@@ -38,7 +35,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
         };
         Ok((
             adc.id,
-            Arc::new(Adc {
+            Arc::new(seq::Adc {
                 num: adc.num,
                 dwell: adc.dwell,
                 delay: adc.delay,
@@ -61,7 +58,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
 
         Ok((
             rf.id,
-            Arc::new(Rf {
+            Arc::new(seq::Rf {
                 amp: rf.amp,
                 phase: (rf.phase_rel, rf.phase_off),
                 shape,
@@ -69,7 +66,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
                 center,
                 freq: (rf.freq_rel, rf.freq_off),
                 shim_shape,
-                rf_use: RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
+                rf_use: seq::RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
             }),
         ))
     })?;
@@ -77,7 +74,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     let mut gradients = map_section_data(&mut sections, |grad: raw::Gradient| {
         Ok((
             grad.id,
-            Arc::new(Gradient::Free {
+            Arc::new(seq::Gradient::Free {
                 amp: grad.amp,
                 shape: shapes.get(grad.shape_id, grad.time_id)?,
                 delay: grad.delay,
@@ -88,7 +85,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     let traps = map_section_data(&mut sections, |trap: raw::Trap| {
         Ok((
             trap.id,
-            Arc::new(Gradient::Trap {
+            Arc::new(seq::Gradient::Trap {
                 amp: trap.amp,
                 rise: trap.rise,
                 flat: trap.flat,
@@ -174,15 +171,15 @@ where
 }
 
 /// Very rough impl just to get something going- values are (ext_name, obj_data)
-fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<Extension>> {
+fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<seq::Extension>> {
     // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
-    let specs: HashMap<(u32, u32), Extension> = exts
+    let specs: HashMap<(u32, u32), seq::Extension> = exts
         .specs
         .iter()
         .flat_map(|spec| {
             spec.instances
                 .iter()
-                .map(|obj| ((spec.id, obj.id), Extension::parse(&spec.name, &obj.data)))
+                .map(|obj| ((spec.id, obj.id), seq::Extension::parse(&spec.name, &obj.data)))
         })
         .collect();
 
@@ -192,8 +189,8 @@ fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<Extension>> {
     fn walk_linked_ref_list(
         refs: &HashMap<u32, raw::ExtensionRef>,
         mut ext_id: u32,
-        specs: &HashMap<(u32, u32), Extension>,
-    ) -> Vec<Extension> {
+        specs: &HashMap<(u32, u32), seq::Extension>,
+    ) -> Vec<seq::Extension> {
         let mut tmp = Vec::new();
         // max depth is 50 - hardcoded, maybe should add cycle detector or proper error return val
         for _ in 0..50 {
@@ -216,14 +213,14 @@ fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<Extension>> {
 }
 
 fn convert_block(
-    block: crate::parse_file::Block,
-    rfs: &HashMap<u32, Arc<Rf>>,
-    gradients: &HashMap<u32, Arc<Gradient>>,
-    adcs: &HashMap<u32, Arc<Adc>>,
+    block: raw::Block,
+    rfs: &HashMap<u32, Arc<seq::Rf>>,
+    gradients: &HashMap<u32, Arc<seq::Gradient>>,
+    adcs: &HashMap<u32, Arc<seq::Adc>>,
     delays: &HashMap<u32, f64>,
-    time_raster: &TimeRaster,
-    exts: &HashMap<u32, Vec<Extension>>,
-) -> Result<Block, ConversionError> {
+    time_raster: &seq::TimeRaster,
+    exts: &HashMap<u32, Vec<seq::Extension>>,
+) -> Result<seq::Block, ConversionError> {
     let err = |ty, id| ConversionError::BrokenRef { ty, id };
     use super::EventType::*;
 
@@ -272,7 +269,7 @@ fn convert_block(
         Vec::new()
     };
 
-    Ok(Block {
+    Ok(seq::Block {
         id: block.id,
         duration,
         rf,
