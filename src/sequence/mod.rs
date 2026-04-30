@@ -8,9 +8,10 @@ use crate::{
     parse_file::{self, Section},
 };
 
+mod convert;
 mod display;
+
 pub mod extensions;
-pub mod from_raw;
 pub use extensions::Extension;
 
 pub struct Sequence {
@@ -23,7 +24,7 @@ pub struct Sequence {
 
 impl Sequence {
     pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, error::Error> {
-        let tmp = from_raw::from_raw(sections)?;
+        let tmp = convert::from_raw(sections)?;
         tmp.validate()?;
         Ok(tmp)
     }

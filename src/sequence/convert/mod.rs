@@ -1,0 +1,285 @@
+use std::{collections::HashMap, sync::Arc};
+
+use super::Sequence;
+use crate::{
+    Adc, Block, Extension, Gradient, Rf, Shape, TimeRaster, error::ConversionError, raw,
+    sequence::RfUse,
+};
+
+mod definitions;
+mod sections;
+mod shape_lib;
+
+use definitions::Defs;
+use sections::{SectionData, get_section_data};
+use shape_lib::ShapeLib;
+
+pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionError> {
+    let [version]: [raw::Version; 1] = get_section_data(&mut sections)
+        .try_into()
+        .map_err(|v: Vec<raw::Version>| ConversionError::VersionSectionCount(v.len()))?;
+
+    let defs = Defs::from_raw(&version, get_section_data(&mut sections))?;
+    check_ext_support(&defs.required_exts)?;
+
+    let mut shapes = ShapeLib::new(map_section_data(&mut sections, |shape: raw::Shape| {
+        Ok((shape.id, Arc::new(Shape(shape.samples))))
+    })?)?;
+
+    let delays = map_section_data(&mut sections, |delay: raw::Delay| {
+        Ok((delay.id, delay.delay))
+    })?;
+
+    let adcs = map_section_data(&mut sections, |adc: raw::Adc| {
+        let phase_shape = if adc.phase_shape_id == 0 {
+            None
+        } else {
+            Some(shapes.get(adc.phase_shape_id, 0)?)
+        };
+        Ok((
+            adc.id,
+            Arc::new(Adc {
+                num: adc.num,
+                dwell: adc.dwell,
+                delay: adc.delay,
+                freq: (adc.freq_rel, adc.freq_off),
+                phase: (adc.phase_rel, adc.phase_off),
+                phase_shape,
+            }),
+        ))
+    })?;
+
+    let rfs = map_section_data(&mut sections, |rf: raw::Rf| {
+        let shape = shapes.get_complex(rf.mag_id, rf.phase_id, rf.time_id)?;
+        let shim_shape = match rf.shim_id {
+            Some((mag_id, phase_id)) => Some(shapes.get_complex(mag_id, phase_id, 0)?),
+            None => None,
+        };
+        let center = rf
+            .center
+            .unwrap_or_else(|| rf.delay + defs.time_raster.rf * shape.calc_center() as f64);
+
+        Ok((
+            rf.id,
+            Arc::new(Rf {
+                amp: rf.amp,
+                phase: (rf.phase_rel, rf.phase_off),
+                shape,
+                delay: rf.delay,
+                center,
+                freq: (rf.freq_rel, rf.freq_off),
+                shim_shape,
+                rf_use: RfUse::from_char(rf.rf_use).expect("parser accepted invalid char"),
+            }),
+        ))
+    })?;
+
+    let mut gradients = map_section_data(&mut sections, |grad: raw::Gradient| {
+        Ok((
+            grad.id,
+            Arc::new(Gradient::Free {
+                amp: grad.amp,
+                shape: shapes.get(grad.shape_id, grad.time_id)?,
+                delay: grad.delay,
+            }),
+        ))
+    })?;
+
+    let traps = map_section_data(&mut sections, |trap: raw::Trap| {
+        Ok((
+            trap.id,
+            Arc::new(Gradient::Trap {
+                amp: trap.amp,
+                rise: trap.rise,
+                flat: trap.flat,
+                fall: trap.fall,
+                delay: trap.delay,
+            }),
+        ))
+    })?;
+
+    // Gradients and Traps share keys
+    let count = gradients.len() + traps.len();
+    gradients.extend(traps);
+    if gradients.len() < count {
+        return Err(ConversionError::GradTrapIdReuse);
+    }
+
+    // TODO: this could be more in-line if the raw file would not contain
+    // a single ext object but instead a vec of exts and a vec of specs
+    let exts: Vec<raw::Extensions> = get_section_data(&mut sections);
+    let exts = match exts.as_slice() {
+        [] => HashMap::new(),
+        [exts] => convert_exts(exts),
+        [..] => unimplemented!(),
+    };
+
+    // We do not use map_section_data here since we do not care about block ids
+    let blocks = get_section_data(&mut sections)
+        .into_iter()
+        .map(|block: raw::Block| {
+            convert_block(
+                block,
+                &rfs,
+                &gradients,
+                &adcs,
+                &delays,
+                &defs.time_raster,
+                &exts,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Sequence {
+        name: defs.name,
+        fov: defs.fov,
+        definitions: defs.defs,
+        time_raster: defs.time_raster,
+        blocks,
+    })
+}
+
+fn check_ext_support(required: &[String]) -> Result<(), ConversionError> {
+    for ext in required {
+        match ext.as_str() {
+            "label" | "labelset" | "labelinc" | "triggers" | "delays" | "rotations"
+            | "rf_shims" => (),
+            _ => panic!("unsupported required extension: '{ext}'"),
+        }
+    }
+    Ok(())
+}
+
+/// Wrapper around get_section_data that applies a mapping func and hashes by id.
+fn map_section_data<T, Val, F>(
+    sections: &mut Vec<raw::Section>,
+    f: F,
+) -> Result<HashMap<u32, Val>, ConversionError>
+where
+    T: SectionData,
+    F: FnMut(T) -> Result<(u32, Val), ConversionError>,
+{
+    let data: Vec<T> = get_section_data(sections);
+    let raw_count = data.len();
+    let data = data
+        .into_iter()
+        .map(f)
+        .collect::<Result<HashMap<u32, Val>, ConversionError>>()?;
+
+    if data.len() < raw_count {
+        Err(ConversionError::EventIdReuse(T::SECTION_TYPE))
+    } else {
+        Ok(data)
+    }
+}
+
+/// Very rough impl just to get something going- values are (ext_name, obj_data)
+fn convert_exts(exts: &raw::Extensions) -> HashMap<u32, Vec<Extension>> {
+    // Indexed by (spec_id, obj_id), contains (spec_name, spec_data)
+    let specs: HashMap<(u32, u32), Extension> = exts
+        .specs
+        .iter()
+        .flat_map(|spec| {
+            spec.instances
+                .iter()
+                .map(|obj| ((spec.id, obj.id), Extension::parse(&spec.name, &obj.data)))
+        })
+        .collect();
+
+    let refs: HashMap<u32, raw::ExtensionRef> =
+        exts.refs.iter().map(|ext| (ext.id, *ext)).collect();
+
+    fn walk_linked_ref_list(
+        refs: &HashMap<u32, raw::ExtensionRef>,
+        mut ext_id: u32,
+        specs: &HashMap<(u32, u32), Extension>,
+    ) -> Vec<Extension> {
+        let mut tmp = Vec::new();
+        // max depth is 50 - hardcoded, maybe should add cycle detector or proper error return val
+        for _ in 0..50 {
+            let ext_ref = &refs[&ext_id];
+            tmp.push(specs[&(ext_ref.spec_id, ext_ref.obj_id)].clone());
+
+            ext_id = ext_ref.next;
+            if ext_id == 0 {
+                return tmp;
+            }
+        }
+        panic!("Max extension linked list depth (50) reached")
+    }
+
+    let mut parsed = HashMap::new();
+    for ext_ref in &exts.refs {
+        parsed.insert(ext_ref.id, walk_linked_ref_list(&refs, ext_ref.id, &specs));
+    }
+    parsed
+}
+
+fn convert_block(
+    block: crate::parse_file::Block,
+    rfs: &HashMap<u32, Arc<Rf>>,
+    gradients: &HashMap<u32, Arc<Gradient>>,
+    adcs: &HashMap<u32, Arc<Adc>>,
+    delays: &HashMap<u32, f64>,
+    time_raster: &TimeRaster,
+    exts: &HashMap<u32, Vec<Extension>>,
+) -> Result<Block, ConversionError> {
+    let err = |ty, id| ConversionError::BrokenRef { ty, id };
+    use super::EventType::*;
+
+    let rf = (block.rf != 0)
+        .then(|| rfs.get(&block.rf).cloned().ok_or(err(Rf, block.rf)))
+        .transpose()?;
+    let gx = (block.gx != 0)
+        .then(|| gradients.get(&block.gx).cloned().ok_or(err(Gx, block.gx)))
+        .transpose()?;
+    let gy = (block.gy != 0)
+        .then(|| gradients.get(&block.gy).cloned().ok_or(err(Gy, block.gy)))
+        .transpose()?;
+    let gz = (block.gz != 0)
+        .then(|| gradients.get(&block.gz).cloned().ok_or(err(Gz, block.gz)))
+        .transpose()?;
+    let adc = (block.adc != 0)
+        .then(|| adcs.get(&block.adc).cloned().ok_or(err(Adc, block.adc)))
+        .transpose()?;
+
+    let duration = match block.dur {
+        raw::BlockDuration::Duration(dur) => dur as f64 * time_raster.block,
+        raw::BlockDuration::DelayId(delay) => {
+            let delay = (delay != 0)
+                .then(|| delays.get(&delay).cloned().ok_or(err(Delay, delay)))
+                .transpose()?;
+
+            [
+                rf.as_ref().map(|rf| rf.duration(time_raster.rf)),
+                gx.as_ref().map(|gx| gx.duration(time_raster.grad)),
+                gy.as_ref().map(|gy| gy.duration(time_raster.grad)),
+                gz.as_ref().map(|gz| gz.duration(time_raster.grad)),
+                adc.as_ref().map(|adc| adc.duration()),
+                delay,
+            ]
+            .into_iter()
+            .flatten()
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0)
+        }
+    };
+
+    // TODO: add Ext event type in error (see code above) to return error instead of unwrapping
+    let ext = if block.ext != 0 {
+        exts.get(&block.ext).cloned().unwrap()
+    } else {
+        Vec::new()
+    };
+
+    Ok(Block {
+        id: block.id,
+        duration,
+        rf,
+        gx,
+        gy,
+        gz,
+        adc,
+        ext,
+    })
+}

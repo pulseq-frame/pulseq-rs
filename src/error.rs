@@ -85,23 +85,33 @@ impl From<winnow::error::ErrMode<winnow::error::ContextError>> for ParseError {
 
 #[derive(Debug)]
 pub enum SectionType {
-    Shapes,
-    Delays,
-    Adcs,
+    Version,
+    Signature,
+    Definitions,
+    Blocks,
     Rfs,
     Gradients,
     Traps,
+    Adcs,
+    Delays,
+    Extensions,
+    Shapes,
 }
 
 impl Display for SectionType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SectionType::Shapes => "Shapes",
-            SectionType::Delays => "Delays",
-            SectionType::Adcs => "Adcs",
+            SectionType::Version => "Version",
+            SectionType::Signature => "Signature",
+            SectionType::Definitions => "Definitions",
+            SectionType::Blocks => "Blocks",
             SectionType::Rfs => "Rfs",
             SectionType::Gradients => "Gradients",
             SectionType::Traps => "Traps",
+            SectionType::Adcs => "Adcs",
+            SectionType::Delays => "Delays",
+            SectionType::Extensions => "Extensions",
+            SectionType::Shapes => "Shapes",
         }
         .fmt(f)
     }
