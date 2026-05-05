@@ -283,7 +283,6 @@ fn convert_block(
         }
     };
 
-    // TODO: add Ext event type in error (see code above) to return error instead of unwrapping
     let ext = if block.ext != 0 {
         exts.get(&block.ext)
             .cloned()

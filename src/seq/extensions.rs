@@ -222,7 +222,7 @@ fn parse_delay(data: &str) -> Result<Extension, ExtensionError> {
 
 /// Labels and their descriptions taken from pypulseq - unknown labels throw an error.
 /// Flags or counters - can be set but not necessarily increased.
-/// https://github.com/imr-framework/pypulseq/blob/master/src/pypulseq/make_label.py
+/// <https://github.com/imr-framework/pypulseq/blob/master/src/pypulseq/make_label.py>
 #[derive(Debug, Clone, Copy)]
 pub enum ExtLabelFlag {
     /// navigator data flag.

@@ -179,8 +179,6 @@ pub enum ExtensionError {
     },
 }
 
-// TODO: Include shape IDs into shapes for better error reporting
-
 #[derive(Error, Debug)]
 pub enum ConversionError {
     #[error("Expected a single [VERSION] section, found {0}")]
