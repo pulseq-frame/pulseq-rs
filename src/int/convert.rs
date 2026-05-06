@@ -90,9 +90,21 @@ pub fn convert(
     seq: &seq::Sequence,
     fov_scale: [f64; 3],
     larmor: f64,
-    _soft_delays: HashMap<String, f64>,
+    soft_delays: HashMap<String, f64>,
     warnings: &mut Vec<InterpreterWarning>,
 ) -> Result<super::Sequence, InterpreterError> {
+    // Every soft-delay referenced anywhere in the sequence must have a value
+    // in the input map. We check up front so the per-block loop can assume
+    // all lookups succeed.
+    for (id, hint) in &seq.soft_delay_hints {
+        if !soft_delays.contains_key(hint) {
+            return Err(InterpreterError::MissingSoftDelay {
+                id: *id,
+                hint: hint.clone(),
+            });
+        }
+    }
+
     // Track the channel count established by the first explicit shim so we
     // can warn (not error) if later RFs disagree.
     let mut expected_shim_channels: Option<usize> = None;
@@ -121,9 +133,47 @@ pub fn convert(
             })
             .transpose()?;
 
+        // Apply any `Delay` extensions on this block. Each one computes a
+        // candidate duration `t_factor * x + t_offset` where `x` is the
+        // user-supplied value for that hint. Updates only when the candidate
+        // is at least the current duration; otherwise warns and skips.
+        let delay_count = block
+            .ext
+            .iter()
+            .filter(|e| matches!(e, seq::Extension::Delay { .. }))
+            .count();
+        if delay_count > 1 {
+            warnings.push(InterpreterWarning::MultipleSoftDelays {
+                block_id: block.id,
+            });
+        }
+        let mut duration = block.duration;
+        for ext in &block.ext {
+            if let seq::Extension::Delay {
+                id,
+                t_offset,
+                t_factor,
+            } = ext
+            {
+                // Both lookups are guaranteed by the validation above.
+                #[allow(clippy::indexing_slicing)]
+                let x = soft_delays[&seq.soft_delay_hints[id]];
+                let computed = t_factor * x + t_offset;
+                if computed >= block.duration {
+                    duration = computed;
+                } else {
+                    warnings.push(InterpreterWarning::SoftDelayShortensBlock {
+                        block_id: block.id,
+                        computed,
+                        block: block.duration,
+                    });
+                }
+            }
+        }
+
         blocks.push(super::Block {
             id: block.id,
-            duration: block.duration,
+            duration,
             rf,
             gx: block
                 .gx

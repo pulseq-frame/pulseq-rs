@@ -25,6 +25,11 @@ pub enum InterpreterError {
     MultipleShimmingExtensions { block_id: u32 },
     #[error("Block #{block_id}: encountered a shim with zero channels")]
     EmptyShim { block_id: u32 },
+    #[error(
+        "Soft delay #{id} (hint {hint:?}) is referenced by the sequence but \
+         no value was provided in the `soft_delays` input"
+    )]
+    MissingSoftDelay { id: u32, hint: String },
 }
 
 #[derive(Error, Debug)]
@@ -38,6 +43,17 @@ pub enum InterpreterWarning {
         expected: usize,
         got: usize,
     },
+    #[error(
+        "Block #{block_id}: soft delay computed to {computed}s, which is \
+         shorter than the block's existing duration {block}s — ignored"
+    )]
+    SoftDelayShortensBlock {
+        block_id: u32,
+        computed: f64,
+        block: f64,
+    },
+    #[error("Block #{block_id}: multiple soft-delay extensions on a single block")]
+    MultipleSoftDelays { block_id: u32 },
 }
 
 #[derive(Error, Debug)]
