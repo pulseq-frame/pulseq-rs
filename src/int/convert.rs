@@ -102,7 +102,7 @@ pub fn convert(
         let rf = block
             .rf
             .as_ref()
-            .map(|rf| {
+            .map(|rf| -> Result<Arc<super::Rf>, InterpreterError> {
                 let shims = resolve_shims(block.id, rf, &block.ext)?;
                 if shims.len() > 1 {
                     match expected_shim_channels {

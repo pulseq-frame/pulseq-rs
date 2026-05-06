@@ -24,6 +24,8 @@ pub struct Sequence {
     pub fov: Option<(f64, f64, f64)>,
     pub definitions: HashMap<String, String>,
     pub blocks: Vec<Block>,
+    /// Soft-delay `id → hint` table, collected from the `delays` extension
+    pub soft_delay_hints: HashMap<u32, String>,
 }
 
 impl Sequence {

@@ -111,7 +111,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
 
     let ext_refs: Vec<raw::ExtensionRef> = get_section_data(&mut sections);
     let ext_specs: Vec<raw::ExtensionSpec> = get_section_data(&mut sections);
-    let exts = convert_exts(ext_refs, ext_specs)?;
+    let (exts, soft_delay_hints) = convert_exts(ext_refs, ext_specs)?;
 
     // We do not use map_section_data here since we do not care about block ids
     let blocks = get_section_data(&mut sections)
@@ -135,6 +135,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
         definitions: defs.defs,
         time_raster: defs.time_raster,
         blocks,
+        soft_delay_hints,
     })
 }
 
@@ -175,18 +176,46 @@ where
 fn convert_exts(
     ext_refs: Vec<raw::ExtensionRef>,
     ext_specs: Vec<raw::ExtensionSpec>,
-) -> Result<HashMap<u32, Vec<seq::Extension>>, ConversionError> {
-    // Convert list of extension specs (block of instances per extension type)
-    // into a flat map of specs (each carrying its extension type)
-    // and build a map with of parsed extensions with (spec_id, obj_id) as key
-    let ext_specs: HashMap<(u32, u32), seq::Extension> = ext_specs
-        .iter()
-        .flat_map(|spec| {
-            spec.instances.iter().map(|obj| {
-                seq::Extension::parse(&spec.name, &obj.data).map(|ext| ((spec.id, obj.id), ext))
-            })
-        })
-        .collect::<Result<_, _>>()?;
+) -> Result<(HashMap<u32, Vec<seq::Extension>>, HashMap<u32, String>), ConversionError> {
+    // Walk every (spec, obj) pair, parsing the extension and - for `delays`
+    // specs - capturing the hint into a single sequence-level table. Hints
+    // are not stored on `Extension::Delay` itself (see seq/extensions.rs).
+    let mut parsed_specs: HashMap<(u32, u32), seq::Extension> = HashMap::new();
+    let mut soft_delay_hints: HashMap<u32, String> = HashMap::new();
+    for spec in &ext_specs {
+        for obj in &spec.instances {
+            let ext = seq::Extension::parse(&spec.name, &obj.data)?;
+
+            if let seq::Extension::Delay { id, .. } = &ext {
+                // parse_delay validated 4 whitespace-separated fields, so
+                // parts[3] (the hint) is guaranteed to exist.
+                let hint = obj
+                    .data
+                    .split_whitespace()
+                    .nth(3)
+                    .unwrap_or_default()
+                    .to_owned();
+                match soft_delay_hints.entry(*id) {
+                    std::collections::hash_map::Entry::Vacant(slot) => {
+                        slot.insert(hint);
+                    }
+                    std::collections::hash_map::Entry::Occupied(slot) => {
+                        if slot.get() != &hint {
+                            return Err(crate::error::SoftDelayHintConflict {
+                                id: *id,
+                                hint_a: slot.get().clone(),
+                                hint_b: hint,
+                            }
+                            .into());
+                        }
+                    }
+                }
+            }
+
+            parsed_specs.insert((spec.id, obj.id), ext);
+        }
+    }
+    let ext_specs = parsed_specs;
 
     // Transform flat list of extension refs into a HashMap indexed by their id
     let ext_ref_count = ext_refs.len();
@@ -234,7 +263,7 @@ fn convert_exts(
         }
         parsed.insert(root_ref.id, ext_list);
     }
-    Ok(parsed)
+    Ok((parsed, soft_delay_hints))
 }
 
 fn convert_block(

@@ -144,6 +144,9 @@ fn render_definitions(seq: &Sequence) -> Markup {
 
         h3 { "Other definitions" }
         (render_other_definitions(seq))
+
+        h3 { "Soft delays" }
+        (render_soft_delays(seq))
     }
 }
 
@@ -158,6 +161,22 @@ fn render_other_definitions(seq: &Sequence) -> Markup {
         table.kv { tbody {
             @for (k, v) in entries {
                 tr { td { (k) } td { (v) } }
+            }
+        } }
+    }
+}
+
+fn render_soft_delays(seq: &Sequence) -> Markup {
+    if seq.soft_delay_hints.is_empty() {
+        return html! { p.empty { "(none)" } };
+    }
+    // Sort by id for stable output.
+    let mut entries: Vec<_> = seq.soft_delay_hints.iter().collect();
+    entries.sort_by_key(|(id, _)| **id);
+    html! {
+        table.kv { tbody {
+            @for (id, hint) in entries {
+                tr { td { "#" (id) } td { (hint) } }
             }
         } }
     }
@@ -317,13 +336,12 @@ impl<'a> maud::Render for ExtensionRender<'a> {
                 } }
             },
             Extension::Delay {
-                numeric_id,
-                text_id,
+                id,
                 t_offset,
                 t_factor,
             } => html! {
                 li { strong { "DELAY" } code {
-                    "#" (numeric_id) " \"" (text_id) "\""
+                    "#" (id)
                     ", offset=" (fmt_seconds(*t_offset))
                     ", factor=" (t_factor)
                 } }

@@ -23,10 +23,12 @@ pub enum Extension {
         duration: f64,
     },
     /// Soft Delay extension (new since pulseq 1.5). Compute delays based on
-    /// scanner special card inputs.
+    /// scanner special card inputs. `id` is the numeric identifier shared
+    /// across all blocks that use the same soft delay; the human-readable
+    /// hint lives once on `Sequence::soft_delay_hints` instead of being
+    /// duplicated on every instance here.
     Delay {
-        numeric_id: u32,
-        text_id: String,
+        id: u32,
         t_offset: f64,
         t_factor: f64,
     },
@@ -210,11 +212,12 @@ fn parse_delay(data: &str) -> Result<Extension, ExtensionError> {
     let int_err = |source| ExtensionError::ParseInt { ext: EXT, source };
     let float_err = |source| ExtensionError::ParseFloat { ext: EXT, source };
 
+    // parts[3] is the hint - intentionally dropped here. It's collected once
+    // by `seq::convert::convert_exts` into `Sequence::soft_delay_hints`.
     Ok(Extension::Delay {
-        numeric_id: parts[0].parse().map_err(int_err)?,
+        id: parts[0].parse().map_err(int_err)?,
         t_offset: parts[1].parse::<f64>().map_err(float_err)? * 1e-6,
         t_factor: 1.0 / parts[2].parse::<f64>().map_err(float_err)?,
-        text_id: parts[3].to_owned(),
     })
 }
 

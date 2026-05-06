@@ -4,6 +4,14 @@ use crate::raw::Version;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[error("Soft-delay id {id} is used with conflicting hints: {hint_a:?} vs {hint_b:?}")]
+pub struct SoftDelayHintConflict {
+    pub id: u32,
+    pub hint_a: String,
+    pub hint_b: String,
+}
+
+#[derive(Error, Debug)]
 pub enum InterpreterError {
     #[error(
         "Block #{block_id}: RF has both an `rf_shims` extension and a pTx \
@@ -252,6 +260,8 @@ pub enum ConversionError {
     TimeShapeNonIncreasing,
     #[error("Unsupported extension: '{0}'")]
     UnsupportedExtension(String),
+    #[error(transparent)]
+    SoftDelayHintConflict(#[from] SoftDelayHintConflict),
 }
 
 #[derive(Error)]
