@@ -85,11 +85,11 @@ pub struct Rf {
     pub freq: f64,
     /// Combined amplitude × exp(i × phase) base shape.
     pub shape: Arc<Shape<Complex64>>,
-    /// Per-channel shim multipliers. `None` = single channel.
-    /// Each entry is a per-sample shape; constant shims (from the official
-    /// `rf_shims` extension) are stored as length-1 shapes, full pTx shapes
-    /// (from the Martin pTx `shim_id` field) keep their per-sample resolution.
-    pub shims: Option<Vec<Arc<Shape<Complex64>>>>,
+    /// Per-channel shim weights, one complex value per transmit channel.
+    /// Sourced from either the official `rf_shims` extension on the block or
+    /// the pTx (Martin) shim shape attached to the seq RF.
+    /// A missing shim is represented as `vec![Complex64::new(1.0, 0.0)]`.
+    pub shims: Vec<Complex64>,
     /// forwarded from raw sequence - specifies what purpose this pulse has.
     pub rf_use: crate::raw::RfUse,
 }

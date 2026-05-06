@@ -68,16 +68,20 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use num_complex::Complex64;
+
 use crate::error::{InterpreterError, InterpreterWarning};
 use crate::seq;
 
 /// Bare-minimum interpretation: copies the seq sequence into the int form,
-/// applying FOV scaling on gradient amplitudes and folding the relative
-/// (`rel × larmor`) and absolute components of RF/ADC frequency and phase.
+/// applying FOV scaling on gradient amplitudes, folding the relative
+/// (`rel × larmor`) and absolute components of RF/ADC frequency and phase,
+/// and resolving RF shims from either the `rf_shims` extension or the pTx
+/// shim shape on the seq RF.
 ///
-/// Extensions are ignored — triggers stay empty, `Once::Always`, `pmc = false`,
-/// `Labels::default()`, and `shims = None`. Soft delays are ignored as well;
-/// block durations are taken verbatim from `seq`. Future steps fill these in.
+/// Other extensions are ignored — triggers stay empty, `Once::Always`,
+/// `pmc = false`, `Labels::default()`. Soft delays are ignored too; block
+/// durations are taken verbatim from `seq`. Future steps fill these in.
 ///
 /// `fov_scale` tells us by how much to increase / decrease FOV per axis (the
 /// caller already worked out `out_fov / seq_fov`); a value of 2 means we
@@ -87,18 +91,40 @@ pub fn convert(
     fov_scale: [f64; 3],
     larmor: f64,
     _soft_delays: HashMap<String, f64>,
-    _warnings: &mut Vec<InterpreterWarning>,
+    warnings: &mut Vec<InterpreterWarning>,
 ) -> Result<super::Sequence, InterpreterError> {
-    let blocks = seq
-        .blocks
-        .iter()
-        .map(|block| super::Block {
+    // Track the channel count established by the first explicit shim so we
+    // can warn (not error) if later RFs disagree.
+    let mut expected_shim_channels: Option<usize> = None;
+    let mut blocks = Vec::with_capacity(seq.blocks.len());
+
+    for block in &seq.blocks {
+        let rf = block
+            .rf
+            .as_ref()
+            .map(|rf| {
+                let shims = resolve_shims(block.id, rf, &block.ext)?;
+                if shims.len() > 1 {
+                    match expected_shim_channels {
+                        None => expected_shim_channels = Some(shims.len()),
+                        Some(expected) if expected != shims.len() => {
+                            warnings.push(InterpreterWarning::InconsistentShimChannelCount {
+                                block_id: block.id,
+                                expected,
+                                got: shims.len(),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
+                Ok(convert_rf(rf, larmor, seq.time_raster.rf, shims))
+            })
+            .transpose()?;
+
+        blocks.push(super::Block {
             id: block.id,
             duration: block.duration,
-            rf: block
-                .rf
-                .as_ref()
-                .map(|rf| convert_rf(rf, larmor, seq.time_raster.rf)),
+            rf,
             gx: block
                 .gx
                 .as_ref()
@@ -115,8 +141,8 @@ pub fn convert(
             triggers: Vec::new(),
             once: super::Once::Always,
             pmc: false,
-        })
-        .collect();
+        });
+    }
 
     Ok(super::Sequence {
         name: seq.name.clone(),
@@ -124,7 +150,50 @@ pub fn convert(
     })
 }
 
-fn convert_rf(rf: &seq::Rf, larmor: f64, rf_raster: f64) -> Arc<super::Rf> {
+/// Resolves the shim for one RF. Errors on multiple `Shimming` extensions,
+/// conflicting sources, or an empty explicit shim.
+fn resolve_shims(
+    block_id: u32,
+    rf: &seq::Rf,
+    extensions: &[seq::Extension],
+) -> Result<Vec<Complex64>, InterpreterError> {
+    let mut ext_iter = extensions.iter().filter_map(|e| match e {
+        seq::Extension::Shimming { shim } => Some(shim),
+        _ => None,
+    });
+    let ext_shim = ext_iter.next();
+    if ext_iter.next().is_some() {
+        return Err(InterpreterError::MultipleShimmingExtensions { block_id });
+    }
+
+    match (ext_shim, rf.shim_shape.as_ref()) {
+        (Some(_), Some(_)) => Err(InterpreterError::ConflictingShimSources { block_id }),
+        (Some(ext), None) => {
+            if ext.is_empty() {
+                return Err(InterpreterError::EmptyShim { block_id });
+            }
+            let shim = ext
+                .iter()
+                .map(|[a, p]| Complex64::from_polar(*a, p * std::f64::consts::TAU))
+                .collect();
+            Ok(shim)
+        }
+        (None, Some(ptx)) => {
+            if ptx.amp.is_empty() {
+                return Err(InterpreterError::EmptyShim { block_id });
+            }
+            Ok(ptx.amp.clone())
+        }
+        (None, None) => Ok(vec![Complex64::new(1.0, 0.0)]),
+    }
+}
+
+fn convert_rf(
+    rf: &seq::Rf,
+    larmor: f64,
+    rf_raster: f64,
+    shims: Vec<Complex64>,
+) -> Arc<super::Rf> {
     Arc::new(super::Rf {
         amp: rf.amp,
         phase: rf.phase.0 * larmor + rf.phase.1,
@@ -132,9 +201,7 @@ fn convert_rf(rf: &seq::Rf, larmor: f64, rf_raster: f64) -> Arc<super::Rf> {
         center: rf.center,
         freq: rf.freq.0 * larmor + rf.freq.1,
         shape: convert_shape(&rf.shape, rf_raster),
-        // shim_shape (pTx Martin extension) is dropped; full shim handling
-        // belongs in step 7 once the official `rf_shims` extension is parsed.
-        shims: None,
+        shims,
         rf_use: rf.rf_use,
     })
 }

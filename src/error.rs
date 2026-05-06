@@ -4,10 +4,33 @@ use crate::raw::Version;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum InterpreterError {}
+pub enum InterpreterError {
+    #[error(
+        "Block #{block_id}: RF has both an `rf_shims` extension and a pTx \
+         shim shape — only one shim source is allowed per RF"
+    )]
+    ConflictingShimSources { block_id: u32 },
+    #[error(
+        "Block #{block_id}: multiple `rf_shims` extension instances — only \
+         one is allowed per block"
+    )]
+    MultipleShimmingExtensions { block_id: u32 },
+    #[error("Block #{block_id}: encountered a shim with zero channels")]
+    EmptyShim { block_id: u32 },
+}
 
 #[derive(Error, Debug)]
-pub enum InterpreterWarning {}
+pub enum InterpreterWarning {
+    #[error(
+        "Block #{block_id}: RF shim has {got} channel(s), but earlier RFs in \
+         the sequence used {expected}"
+    )]
+    InconsistentShimChannelCount {
+        block_id: u32,
+        expected: usize,
+        got: usize,
+    },
+}
 
 #[derive(Error, Debug)]
 pub enum ShapeDecompressionError {
