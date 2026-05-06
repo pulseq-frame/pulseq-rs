@@ -53,7 +53,7 @@ impl ShapeLib {
                     return Err(ConversionError::HalfTickShapeEvenSampleCount(m));
                 }
                 let time: Vec<f64> = (0..m).map(|i| (i + 1) as f64 * 0.5).collect();
-                let duration = ((m + 1) / 2) as u32;
+                let duration = m.div_ceil(2) as u32;
                 (time, duration)
             }
             // Custom time shape - look it up and validate.

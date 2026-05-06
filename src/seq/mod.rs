@@ -194,7 +194,7 @@ impl<T> Shape<T> {
         if time.is_empty() {
             return Err(ConversionError::EmptyShape);
         }
-        if !time.windows(2).all(|w| w[0] < w[1]) {
+        if !time.array_windows().all(|[w1, w2]| w1 < w2) {
             return Err(ConversionError::TimeShapeNonIncreasing);
         }
         let dur_f = duration as f64;
@@ -217,6 +217,7 @@ where
     /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`. Lifted
     /// from the previous `expand_shape` so callers (simulators or scanner
     /// raster expansion) can sample at any point without re-implementing it.
+    #[allow(clippy::indexing_slicing)]
     pub fn interpolate(&self, time: f64) -> T {
         if time <= self.time[0] {
             return self.amp[0];

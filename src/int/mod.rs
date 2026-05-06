@@ -32,7 +32,7 @@ impl<T> Shape<T> {
         if time.len() != amp.len() || time.is_empty() {
             return None;
         }
-        if !time.windows(2).all(|w| w[0] < w[1]) {
+        if !time.array_windows().all(|[w1, w2]| w1 < w2) {
             return None;
         }
         if time.iter().any(|&t| t < 0.0 || t > duration) {
@@ -52,6 +52,7 @@ where
 {
     /// Linear interpolation at `time` (in seconds). Returns `amp[0]` for
     /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`.
+    #[allow(clippy::indexing_slicing)]
     pub fn interpolate(&self, time: f64) -> T {
         if time <= self.time[0] {
             return self.amp[0];
