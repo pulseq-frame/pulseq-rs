@@ -46,7 +46,7 @@ impl Counters {
         if let Some(&existing) = self.shape.get(&ptr) {
             return existing;
         }
-        let id = self.shape.len() as u32 + 1;
+        let id = (self.shape.len() + self.cshape.len()) as u32 + 1;
         self.shape.insert(ptr, id);
         let _ = writeln!(
             self.shape_data,
@@ -62,7 +62,7 @@ impl Counters {
         if let Some(&existing) = self.cshape.get(&ptr) {
             return existing;
         }
-        let id = self.cshape.len() as u32 + 1;
+        let id = (self.shape.len() + self.cshape.len()) as u32 + 1;
         let re: Vec<f64> = x.amp.iter().map(|c| c.re).collect();
         let im: Vec<f64> = x.amp.iter().map(|c| c.im).collect();
         let _ = writeln!(
