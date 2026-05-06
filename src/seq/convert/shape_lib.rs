@@ -2,51 +2,90 @@ use std::{collections::HashMap, sync::Arc};
 
 use num_complex::Complex64;
 
-use crate::{error::ConversionError, seq::ComplexShape, seq::Shape};
+use crate::{error::ConversionError, seq::Shape};
 
 pub struct ShapeLib {
-    shapes: HashMap<u32, Arc<Shape>>,
-    memo: HashMap<(u32, u32), Arc<Shape>>,
-    complex_memo: HashMap<(u32, u32, u32), Arc<ComplexShape>>,
+    raw: HashMap<u32, Arc<Vec<f64>>>,
+    memo: HashMap<(u32, i32), Arc<Shape<f64>>>,
+    complex_memo: HashMap<(u32, u32, i32), Arc<Shape<Complex64>>>,
 }
 
 impl ShapeLib {
-    pub fn new(shapes: HashMap<u32, Arc<Shape>>) -> Result<Self, ConversionError> {
-        // Checking this guarantee once makes later code easier
-        if shapes.contains_key(&0) {
-            Err(ConversionError::ShapeIndexZero)
-        } else {
-            Ok(Self {
-                shapes,
-                memo: HashMap::default(),
-                complex_memo: HashMap::default(),
-            })
+    pub fn new(raw: HashMap<u32, Arc<Vec<f64>>>) -> Result<Self, ConversionError> {
+        // Checking these guarantees once makes later code easier.
+        if raw.contains_key(&0) {
+            return Err(ConversionError::ShapeIndexZero);
         }
+        if raw.values().any(|s| s.is_empty()) {
+            return Err(ConversionError::EmptyShape);
+        }
+        Ok(Self {
+            raw,
+            memo: HashMap::default(),
+            complex_memo: HashMap::default(),
+        })
     }
-    pub fn get(&mut self, shape_id: u32, time_id: u32) -> Result<Arc<Shape>, ConversionError> {
+
+    pub fn get(&mut self, shape_id: u32, time_id: i32) -> Result<Arc<Shape<f64>>, ConversionError> {
         let key = (shape_id, time_id);
         if let Some(cached) = self.memo.get(&key) {
             return Ok(cached.clone());
         }
 
-        // First we get the shape itself,
-        // then we see if can use it directly or need to expand it with the time shape
-        let shape = self
-            .shapes
+        let amp_arc = self
+            .raw
             .get(&shape_id)
-            .ok_or(ConversionError::ShapeNotFound(shape_id))?;
+            .ok_or(ConversionError::ShapeNotFound(shape_id))?
+            .clone();
+        let amp = (*amp_arc).clone();
+        let m = amp.len();
 
-        let shape = if time_id == 0 {
-            shape.clone()
-        } else {
-            let time = self
-                .shapes
-                .get(&time_id)
-                .ok_or(ConversionError::ShapeNotFound(time_id))?;
+        let (time, duration) = match time_id {
+            // time_id = 0: uniform centers [0.5, 1.5, ..., M-0.5], duration M.
+            0 => {
+                let time: Vec<f64> = (0..m).map(|i| i as f64 + 0.5).collect();
+                (time, m as u32)
+            }
+            // time_id = -1 (pulseq 1.5+): half-tick grid [0.5, 1.0, ..., M*0.5].
+            // M = 2N-1, so the shape's sample count must be odd.
+            -1 => {
+                if m % 2 == 0 {
+                    return Err(ConversionError::HalfTickShapeEvenSampleCount(m));
+                }
+                let time: Vec<f64> = (0..m).map(|i| (i + 1) as f64 * 0.5).collect();
+                let duration = ((m + 1) / 2) as u32;
+                (time, duration)
+            }
+            // Custom time shape - look it up and validate.
+            x if x > 0 => {
+                let time_shape_id = x as u32;
+                let raw_time = self
+                    .raw
+                    .get(&time_shape_id)
+                    .ok_or(ConversionError::ShapeNotFound(time_shape_id))?;
 
-            Arc::new(expand_shape(shape, time)?)
+                if raw_time.len() != m {
+                    return Err(ConversionError::TimeShapeMismatch {
+                        shape_len: m,
+                        time_len: raw_time.len(),
+                    });
+                }
+                if raw_time.iter().any(|x| x.fract() != 0.0) {
+                    return Err(ConversionError::TimeShapeNonInteger);
+                }
+                if raw_time.iter().any(|x| *x < 0.0) {
+                    return Err(ConversionError::TimeShapeNegative);
+                }
+                let time: Vec<f64> = raw_time.iter().copied().collect();
+                let duration = *raw_time
+                    .last()
+                    .ok_or(ConversionError::EmptyShape)? as u32;
+                (time, duration)
+            }
+            other => return Err(ConversionError::UnknownTimeId(other)),
         };
 
+        let shape = Arc::new(Shape::new(time, amp, duration)?);
         self.memo.insert(key, shape.clone());
         Ok(shape)
     }
@@ -55,8 +94,8 @@ impl ShapeLib {
         &mut self,
         mag_id: u32,
         phase_id: u32,
-        time_id: u32,
-    ) -> Result<Arc<ComplexShape>, ConversionError> {
+        time_id: i32,
+    ) -> Result<Arc<Shape<Complex64>>, ConversionError> {
         let key = (mag_id, phase_id, time_id);
         if let Some(cached) = self.complex_memo.get(&key) {
             return Ok(cached.clone());
@@ -65,83 +104,25 @@ impl ShapeLib {
         let mag = self.get(mag_id, time_id)?;
         let phase = self.get(phase_id, time_id)?;
 
-        if mag.0.len() != phase.0.len() {
-            // TODO: can't be the time shape (is the same) but only happen when time_id==0 and shapes mismatch
+        // mag and phase share `time` when `time_id != 0`. For `time_id == 0`
+        // both are synthesised from their own length, so a length mismatch
+        // here means the two raw shapes disagreed.
+        if mag.amp.len() != phase.amp.len() {
             return Err(ConversionError::TimeShapeMismatch {
-                shape_len: mag.0.len(),
-                time_len: phase.0.len(),
+                shape_len: mag.amp.len(),
+                time_len: phase.amp.len(),
             });
         }
 
-        let samples = mag
-            .0
+        let amp: Vec<Complex64> = mag
+            .amp
             .iter()
-            .zip(phase.0.iter())
+            .zip(phase.amp.iter())
             .map(|(&a, &p)| Complex64::from_polar(a, p * std::f64::consts::TAU))
             .collect();
 
-        let shape = Arc::new(ComplexShape(samples));
+        let shape = Arc::new(Shape::new(mag.time.clone(), amp, mag.duration)?);
         self.complex_memo.insert(key, shape.clone());
         Ok(shape)
     }
-}
-
-/// Here we do interpolation as given by the time shape. The spec unfortunately does not
-/// define at all how to use the time shapes, but here is what I found by looking at
-/// how they are used in example scripts:
-/// The shape is defined by a series of time points that are on the EDGES of the samples:
-/// A trapezoid is defined by [0, rise, rise + flat, rise + flat + fall] while the first
-/// sample should be at [0.5 * dwell, ...]. This means that a time shape [0, 100] is not
-/// 101 units long but indeed 100 - with the samples being located at [0.5, 1.5, ..., 99.5].
-/// This is how the scripts use the custom time shape feature and what would be
-/// consistent with the make_..._pulse functions.
-/// But this also means that the amplitudes are given in-between samples and need
-/// to be interpolated, while shapes without time-shapes are definded on-sample.
-/// This is probably an oversight of pulseq, but seems to be the best approach of
-/// implementing time shape expansion right now.
-/// In addition, we use linar interpolation (as it seems to be expected when using
-/// this feature for trap grads). The spec does not say anything about interpolation at all.
-/// 
-/// TODO: check if this actually correct and how interpreters expect it.
-fn expand_shape(shape: &Arc<Shape>, time: &Arc<Shape>) -> Result<Shape, ConversionError> {
-    if shape.0.len() != time.0.len() {
-        return Err(ConversionError::TimeShapeMismatch {
-            shape_len: shape.0.len(),
-            time_len: time.0.len(),
-        });
-    }
-
-    // Probably a bug but technically not an error
-    if shape.0.is_empty() {
-        return Ok(Shape(Vec::new()));
-    }
-
-    // Convert time shape to integers (after a check if that's okay)
-    if time.0.iter().any(|x| x.fract() != 0.0) {
-        return Err(ConversionError::TimeShapeNonInteger);
-    }
-    if time.0.iter().any(|x| *x < 0.0) {
-        return Err(ConversionError::TimeShapeNegative);
-    }
-    let time: Vec<_> = time.0.iter().map(|x| *x as u32).collect();
-
-    // Do the actual conversion
-    let mut expanded = Vec::with_capacity(*time.last().unwrap_or(&0) as usize);
-    let mut amp = shape.0[0];
-
-    for (len, &next_amp) in time.into_iter().zip(shape.0.iter()) {
-        // If we are suddenly too long, time shape is not strictly increasing
-        if expanded.len() > len as usize {
-            return Err(ConversionError::TimeShapeNonIncreasing);
-        }
-        // Interpolate between amp and next_amp in line_len steps
-        let line_len = len - expanded.len() as u32;
-        for t in 0..line_len {
-            let t = (t as f64 + 0.5) / line_len as f64;
-            expanded.push(amp + t * (next_amp - amp));
-        }
-        amp = next_amp;
-    }
-
-    Ok(Shape(expanded))
 }

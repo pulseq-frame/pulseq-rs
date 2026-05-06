@@ -23,7 +23,7 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     check_ext_support(&defs.required_exts)?;
 
     let mut shapes = ShapeLib::new(map_section_data(&mut sections, |shape: raw::Shape| {
-        Ok((shape.id, Arc::new(seq::Shape(shape.samples))))
+        Ok((shape.id, Arc::new(shape.samples)))
     })?)?;
 
     let delays = map_section_data(&mut sections, |delay: raw::Delay| {
@@ -31,6 +31,10 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     })?;
 
     let adcs = map_section_data(&mut sections, |adc: raw::Adc| {
+        // SPEC NOTE: pulseq has no `time_id` for ADC phase shapes; the array
+        // is sampled per ADC sample at `dwell`. We pass `time_id = 0` so the
+        // shape gets a synthesised `time = (1..=n)` matching every other
+        // uniform shape, letting downstream code treat shapes uniformly.
         let phase_shape = if adc.phase_shape_id == 0 {
             None
         } else {

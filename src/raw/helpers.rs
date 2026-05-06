@@ -101,6 +101,12 @@ pub fn int(input: &mut &str) -> ModalResult<u32> {
     preceded(opt(ws), winnow::ascii::dec_uint).parse_next(input)
 }
 
+/// (opt(ws), signed int) - used for `time_id` fields where pulseq 1.5 introduced
+/// the `-1` sentinel (samples at every half-tick).
+pub fn signed_int(input: &mut &str) -> ModalResult<i32> {
+    preceded(opt(ws), winnow::ascii::dec_int).parse_next(input)
+}
+
 /// (opt(ws), float)
 pub fn float(input: &mut &str) -> ModalResult<f64> {
     preceded(opt(ws), winnow::ascii::float).parse_next(input)

@@ -4,7 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use maud::{Markup, PreEscaped, html};
-use pulseq_rs::seq::{Adc, Block, ComplexShape, Extension, Gradient, Rf, Sequence, Shape};
+use num_complex::Complex64;
+use pulseq_rs::seq::{Adc, Block, Extension, Gradient, Rf, Sequence, Shape};
 
 use crate::viewer::{fmt_seconds, json_floats, page};
 
@@ -21,8 +22,8 @@ struct Counters {
     rf: HashMap<*const Rf, u32>,
     grad: HashMap<*const Gradient, u32>,
     adc: HashMap<*const Adc, u32>,
-    shape: HashMap<*const Shape, u32>,
-    cshape: HashMap<*const ComplexShape, u32>,
+    shape: HashMap<*const Shape<f64>, u32>,
+    cshape: HashMap<*const Shape<Complex64>, u32>,
     shape_data: String,
     shape_divs: String,
 }
@@ -40,28 +41,34 @@ impl Counters {
         let next = self.adc.len() as u32 + 1;
         *self.adc.entry(Arc::as_ptr(x)).or_insert(next)
     }
-    fn shape(&mut self, x: &Arc<Shape>) -> u32 {
+    fn shape(&mut self, x: &Arc<Shape<f64>>) -> u32 {
         let ptr = Arc::as_ptr(x);
         if let Some(&existing) = self.shape.get(&ptr) {
             return existing;
         }
         let id = self.shape.len() as u32 + 1;
         self.shape.insert(ptr, id);
-        let _ = writeln!(self.shape_data, "shapes[{id}] = {};", json_floats(&x.0));
+        let _ = writeln!(
+            self.shape_data,
+            "shapes[{id}] = {{time: {}, amp: {}}};",
+            json_floats(&x.time),
+            json_floats(&x.amp),
+        );
         let _ = writeln!(self.shape_divs, "<div id='shape-plot-{id}'></div>");
         id
     }
-    fn complex_shape(&mut self, x: &Arc<ComplexShape>) -> u32 {
+    fn complex_shape(&mut self, x: &Arc<Shape<Complex64>>) -> u32 {
         let ptr = Arc::as_ptr(x);
         if let Some(&existing) = self.cshape.get(&ptr) {
             return existing;
         }
         let id = self.cshape.len() as u32 + 1;
-        let re: Vec<f64> = x.0.iter().map(|c| c.re).collect();
-        let im: Vec<f64> = x.0.iter().map(|c| c.im).collect();
+        let re: Vec<f64> = x.amp.iter().map(|c| c.re).collect();
+        let im: Vec<f64> = x.amp.iter().map(|c| c.im).collect();
         let _ = writeln!(
             self.shape_data,
-            "cshapes_re[{id}] = {}; cshapes_im[{id}] = {};",
+            "cshapes[{id}] = {{time: {}, re: {}, im: {}}};",
+            json_floats(&x.time),
             json_floats(&re),
             json_floats(&im),
         );
@@ -98,7 +105,7 @@ pub fn render(input: &Path, seq: &Sequence) -> String {
     };
 
     let inline_script = html! {
-        "var shapes = {};\nvar cshapes_re = {};\nvar cshapes_im = {};\n"
+        "var shapes = {};\nvar cshapes = {};\n"
         (PreEscaped(counters.shape_data))
     };
 
@@ -205,9 +212,9 @@ fn render_rf_tag(rf: &Arc<Rf>, counters: &mut Counters) -> Markup {
     }
 }
 
-fn render_complex_shape_link(shape: &Arc<ComplexShape>, counters: &mut Counters) -> Markup {
+fn render_complex_shape_link(shape: &Arc<Shape<Complex64>>, counters: &mut Counters) -> Markup {
     let id = counters.complex_shape(shape);
-    let n = shape.0.len();
+    let n = shape.amp.len();
     html! {
         span.shape-link data-cshape=(id) {
             (format!("shape {id:02x} ({n} samples)"))
@@ -216,9 +223,9 @@ fn render_complex_shape_link(shape: &Arc<ComplexShape>, counters: &mut Counters)
     }
 }
 
-fn render_shape_link(shape: &Arc<Shape>, counters: &mut Counters) -> Markup {
+fn render_shape_link(shape: &Arc<Shape<f64>>, counters: &mut Counters) -> Markup {
     let id = counters.shape(shape);
-    let n = shape.0.len();
+    let n = shape.amp.len();
     html! {
         span.shape-link data-shape=(id) {
             (format!("shape {id:02x} ({n} samples)"))

@@ -39,7 +39,7 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
         amp: cut_err(float),
         mag_id: cut_err(int),
         phase_id: cut_err(int),
-        time_id: cut_err(int),
+        time_id: cut_err(signed_int),
         center: cut_err(float).map(|x| Some(x * 1e-6)),
         delay: cut_err(int).map(|x: u32| x as f64 * 1e-6),
         freq_rel: cut_err(float).map(|x| x * 1e-6),

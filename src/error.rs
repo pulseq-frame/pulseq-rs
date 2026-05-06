@@ -207,6 +207,12 @@ pub enum ConversionError {
     ShapeNotFound(u32),
     #[error("Can't use 0 as shape index")]
     ShapeIndexZero,
+    #[error("Encountered a shape with no samples")]
+    EmptyShape,
+    #[error("time_id = -1 requires an odd sample count (M = 2N-1), got {0}")]
+    HalfTickShapeEvenSampleCount(usize),
+    #[error("Unknown time_id sentinel {0} (only 0 and -1 are recognised; positive = shape id)")]
+    UnknownTimeId(i32),
     #[error("Used a shape of length {shape_len} together with a time shape of length {time_len}")]
     TimeShapeMismatch { shape_len: usize, time_len: usize },
     #[error("Used a shape as time shape which contained negative values.")]

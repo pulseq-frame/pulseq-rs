@@ -6,10 +6,10 @@
 var common = { margin: { t: 10, r: 10, b: 30, l: 45 }, showlegend: false };
 
 // Used by viewer_structured's shape-popup hover behavior. The inline data
-// script populates these maps with sample arrays keyed by shape id.
+// script populates these maps with {time, amp} / {time, re, im} objects keyed
+// by shape id.
 window.shapes = window.shapes || {};
-window.cshapes_re = window.cshapes_re || {};
-window.cshapes_im = window.cshapes_im || {};
+window.cshapes = window.cshapes || {};
 
 document.addEventListener('DOMContentLoaded', function () {
   // Shape-popup hover (viewer_structured). No-op in viewer_raw because there
@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
     showlegend: false,
     width: 480,
     height: 240,
-    xaxis: { title: 'sample' }
+    xaxis: { title: 'time [ticks]' }
   };
   var clayout = Object.assign({}, layout, { showlegend: true });
   var config = { responsive: false, displaylogo: false, displayModeBar: false };
@@ -27,9 +27,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function ensurePlotted(plotDiv, shapeId) {
     if (!plotDiv.dataset.rendered) {
+      var s = window.shapes[shapeId];
       Plotly.newPlot(
         plotDiv,
-        [{ y: window.shapes[shapeId], mode: 'lines', line: { width: 1.2 } }],
+        [{ x: s.time, y: s.amp, mode: 'lines', line: { width: 1.2 } }],
         layout,
         config
       );
@@ -39,11 +40,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function ensureComplexPlotted(plotDiv, shapeId) {
     if (!plotDiv.dataset.rendered) {
+      var s = window.cshapes[shapeId];
       Plotly.newPlot(
         plotDiv,
         [
-          { y: window.cshapes_re[shapeId], mode: 'lines', line: { width: 1.2 }, name: 'real' },
-          { y: window.cshapes_im[shapeId], mode: 'lines', line: { width: 1.2 }, name: 'imag' }
+          { x: s.time, y: s.re, mode: 'lines', line: { width: 1.2 }, name: 'real' },
+          { x: s.time, y: s.im, mode: 'lines', line: { width: 1.2 }, name: 'imag' }
         ],
         clayout,
         config

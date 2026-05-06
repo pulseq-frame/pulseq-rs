@@ -153,7 +153,7 @@ impl RefPrinter<Rf> {
     fn fmt(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        cshape_refs: &mut RefPrinter<ComplexShape>,
+        cshape_refs: &mut RefPrinter<Shape<Complex64>>,
     ) -> std::fmt::Result {
         let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
         tmp.sort_by_key(|(_, id)| *id);
@@ -199,26 +199,13 @@ impl Display for RefPrinter<Adc> {
     }
 }
 
-impl Display for RefPrinter<Shape> {
+impl<T> Display for RefPrinter<Shape<T>> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
         tmp.sort_by_key(|(_, id)| *id);
 
         for (rc, id) in tmp {
-            writeln!(f, "[{id:4}] {:6}", rc.0.len())?;
-        }
-
-        Ok(())
-    }
-}
-
-impl Display for RefPrinter<ComplexShape> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
-        tmp.sort_by_key(|(_, id)| *id);
-
-        for (rc, id) in tmp {
-            writeln!(f, "[{id:4}] {:6}", rc.0.len())?;
+            writeln!(f, "[{id:4}] {:6}", rc.amp.len())?;
         }
 
         Ok(())
@@ -229,7 +216,7 @@ impl RefPrinter<Gradient> {
     fn fmt(
         &self,
         f: &mut std::fmt::Formatter<'_>,
-        shape_refs: &mut RefPrinter<Shape>,
+        shape_refs: &mut RefPrinter<Shape<f64>>,
     ) -> std::fmt::Result {
         let mut tmp: Vec<_> = self.0.iter().map(|(_addr, (rc, id))| (rc, *id)).collect();
         tmp.sort_by_key(|(_, id)| *id);

@@ -1,9 +1,76 @@
 use std::collections::HashMap;
+use std::ops::{Add, Mul, Sub};
 use std::sync::Arc;
 
-use crate::seq::{self, ComplexShape, Shape};
+use num_complex::Complex64;
+
+use crate::seq;
 
 pub use crate::raw::RfUse;
+
+/// Sparse sample representation, mirroring `seq::Shape` but with `time` and
+/// `duration` in seconds (already multiplied by the appropriate raster during
+/// seq→int lowering). `int` no longer carries a `time_raster`, since every
+/// shape already knows its own absolute timing.
+///
+/// Invariants: same as `seq::Shape`. `duration` is the total active extent in
+/// seconds and may be larger than `*time.last()` (e.g. for shapes with samples
+/// at centers `[0.5, 1.5, …, N-0.5] * raster`, duration is `N * raster`).
+pub struct Shape<T> {
+    /// Absolute times in seconds for each sample.
+    pub time: Vec<f64>,
+    /// Sample values aligned with `time` 1:1.
+    pub amp: Vec<T>,
+    /// Total active extent in seconds. Not necessarily `*time.last()`.
+    pub duration: f64,
+}
+
+impl<T> Shape<T> {
+    /// Validate invariants. Mirrors `seq::Shape::new` but with `f64` time and
+    /// duration.
+    pub fn new(time: Vec<f64>, amp: Vec<T>, duration: f64) -> Option<Self> {
+        if time.len() != amp.len() || time.is_empty() {
+            return None;
+        }
+        if !time.windows(2).all(|w| w[0] < w[1]) {
+            return None;
+        }
+        if time.iter().any(|&t| t < 0.0 || t > duration) {
+            return None;
+        }
+        Some(Self {
+            time,
+            amp,
+            duration,
+        })
+    }
+}
+
+impl<T> Shape<T>
+where
+    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
+{
+    /// Linear interpolation at `time` (in seconds). Returns `amp[0]` for
+    /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`.
+    pub fn interpolate(&self, time: f64) -> T {
+        if time <= self.time[0] {
+            return self.amp[0];
+        }
+        let last = self.time.len() - 1;
+        if time >= self.time[last] {
+            return self.amp[last];
+        }
+        let idx = self
+            .time
+            .iter()
+            .position(|&t| t >= time)
+            .unwrap_or(last);
+        let t0 = self.time[idx - 1];
+        let t1 = self.time[idx];
+        let frac = (time - t0) / (t1 - t0);
+        self.amp[idx - 1] + (self.amp[idx] - self.amp[idx - 1]) * frac
+    }
+}
 
 pub struct Sequence {
     pub name: Option<String>,
@@ -64,12 +131,12 @@ pub struct Rf {
     /// `[Hz]` - relative and offset components combined via the larmor frequency.
     pub freq: f64,
     /// Combined amplitude × exp(i × phase) base shape.
-    pub shape: Arc<ComplexShape>,
+    pub shape: Arc<Shape<Complex64>>,
     /// Per-channel shim multipliers. `None` = single channel.
     /// Each entry is a per-sample shape; constant shims (from the official
     /// `rf_shims` extension) are stored as length-1 shapes, full pTx shapes
     /// (from the Martin pTx `shim_id` field) keep their per-sample resolution.
-    pub shims: Option<Vec<Arc<ComplexShape>>>,
+    pub shims: Option<Vec<Arc<Shape<Complex64>>>>,
     pub rf_use: RfUse,
 }
 
@@ -79,7 +146,7 @@ pub enum Gradient {
         amp: f64,
         /// `[s]`
         delay: f64,
-        shape: Arc<Shape>,
+        shape: Arc<Shape<f64>>,
     },
     Trap {
         /// `[Hz/m]` - already FOV-scaled. Note: rotating a trapezoid around
@@ -108,7 +175,7 @@ pub struct Adc {
     /// `[rad]` - relative and offset components combined via the larmor frequency.
     pub phase: f64,
     /// Optional per-sample phase modulation, applied on top of `phase`.
-    pub phase_shape: Option<Arc<Shape>>,
+    pub phase_shape: Option<Arc<Shape<f64>>>,
     /// Snapshot of the label state at the time this ADC fires.
     pub labels: Labels,
 }
@@ -206,7 +273,7 @@ pub struct Labels {
 //   promote to errors with `--strict`).
 
 impl Sequence {
-    pub fn from_seq(seq: &seq::Sequence, data: Data) -> Self {
+    pub fn from_seq(_seq: &seq::Sequence, _data: Data) -> Self {
         todo!()
     }
 }

@@ -78,7 +78,7 @@ pub fn rfs(input: &mut &str) -> ModalResult<Vec<Rf>> {
         amp: cut_err(float),
         mag_id: cut_err(int),
         phase_id: cut_err(int),
-        time_id: cut_err(int),
+        time_id: cut_err(signed_int),
         center: empty.value(None),
         delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
         freq_rel: empty.value(1.0),
@@ -105,7 +105,7 @@ pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
         id: int,
         amp: cut_err(float),
         shape_id: cut_err(int),
-        time_id: cut_err(int),
+        time_id: cut_err(signed_int),
         delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
         _: cut_err(nl),
     }}

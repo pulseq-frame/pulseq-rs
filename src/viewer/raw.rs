@@ -62,7 +62,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             text(rf.amp.to_string()),
                             id_ref("shape", rf.mag_id),
                             id_ref("shape", rf.phase_id),
-                            id_ref("shape", rf.time_id),
+                            id_ref_signed("shape", rf.time_id),
                             text(rf.center.map_or("-".to_owned(), |x| x.to_string())),
                             text(format!("{:.6}", rf.delay)),
                             text(rf.freq_rel.to_string()),
@@ -83,7 +83,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                             text(g.id.to_string()),
                             text(g.amp.to_string()),
                             id_ref("shape", g.shape_id),
-                            id_ref("shape", g.time_id),
+                            id_ref_signed("shape", g.time_id),
                             text(format!("{:.6}", g.delay)),
                         ],
                     ));
@@ -251,6 +251,16 @@ fn id_ref(prefix: &str, id: u32) -> Markup {
         text("0")
     } else {
         html! { a href=(format!("#{prefix}-{id}")) { (id) } }
+    }
+}
+
+/// Same as `id_ref` for non-negative ids; negative ids (e.g. `time_id = -1`,
+/// the pulseq 1.5+ half-tick sentinel) are rendered verbatim without a link.
+fn id_ref_signed(prefix: &str, id: i32) -> Markup {
+    if id < 0 {
+        text(id.to_string())
+    } else {
+        id_ref(prefix, id as u32)
     }
 }
 

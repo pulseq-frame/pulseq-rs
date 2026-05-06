@@ -119,7 +119,10 @@ pub struct Rf {
     pub amp: f64,
     pub mag_id: u32,
     pub phase_id: u32,
-    pub time_id: u32,
+    /// Sentinel values: `0` = uniform centers `[0.5, 1.5, …, N-0.5]`,
+    /// `-1` (pulseq 1.5+) = half-tick grid `[0.5, 1.0, 1.5, …, N-0.5]` with
+    /// `M = 2N-1` samples, positive = id of a custom time shape.
+    pub time_id: i32,
     /// `s` (from pulseq: `us`)
     pub center: Option<f64>,
     /// `s` (from pulseq: `us`)
@@ -169,7 +172,10 @@ pub struct Gradient {
     /// `Hz/m`
     pub amp: f64,
     pub shape_id: u32,
-    pub time_id: u32,
+    /// Sentinel values: `0` = uniform centers `[0.5, 1.5, …, N-0.5]`,
+    /// `-1` (pulseq 1.5+) = half-tick grid `[0.5, 1.0, 1.5, …, N-0.5]` with
+    /// `M = 2N-1` samples, positive = id of a custom time shape.
+    pub time_id: i32,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
 }
