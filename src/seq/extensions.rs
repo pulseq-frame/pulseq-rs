@@ -103,21 +103,19 @@ fn parse_rotation(data: &str) -> Result<Extension, ExtensionError> {
         })
         .collect::<Result<_, _>>()?;
 
-    let quat: [f64; 4] = parts.try_into().map_err(|v: Vec<f64>| {
-        ExtensionError::WrongFieldCount {
-            ext: EXT,
-            expected: 4,
-            got: v.len(),
-        }
-    })?;
+    let quat: [f64; 4] =
+        parts
+            .try_into()
+            .map_err(|v: Vec<f64>| ExtensionError::WrongFieldCount {
+                ext: EXT,
+                expected: 4,
+                got: v.len(),
+            })?;
 
     Ok(Extension::Rotation { quat })
 }
 
-fn parse_label_inner(
-    ext: &'static str,
-    data: &str,
-) -> Result<(i32, ExtLabelFlag), ExtensionError> {
+fn parse_label_inner(ext: &'static str, data: &str) -> Result<(i32, ExtLabelFlag), ExtensionError> {
     let (value, flag) = data
         .split_once(' ')
         .ok_or(ExtensionError::WrongFieldCount {

@@ -77,9 +77,7 @@ impl ShapeLib {
                     return Err(ConversionError::TimeShapeNegative);
                 }
                 let time: Vec<f64> = raw_time.iter().copied().collect();
-                let duration = *raw_time
-                    .last()
-                    .ok_or(ConversionError::EmptyShape)? as u32;
+                let duration = *raw_time.last().ok_or(ConversionError::EmptyShape)? as u32;
                 (time, duration)
             }
             other => return Err(ConversionError::UnknownTimeId(other)),

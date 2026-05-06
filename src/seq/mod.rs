@@ -14,7 +14,6 @@ use crate::{
 };
 
 mod convert;
-mod display;
 
 pub mod extensions;
 pub use extensions::Extension;
@@ -226,11 +225,7 @@ where
         if time >= self.time[last] {
             return self.amp[last];
         }
-        let idx = self
-            .time
-            .iter()
-            .position(|&t| t >= time)
-            .unwrap_or(last);
+        let idx = self.time.iter().position(|&t| t >= time).unwrap_or(last);
         let t0 = self.time[idx - 1];
         let t1 = self.time[idx];
         let frac = (time - t0) / (t1 - t0);
