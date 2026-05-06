@@ -188,7 +188,24 @@ pub fn convert(
                 .as_ref()
                 .map(|g| convert_grad(g, fov_scale[2], seq.time_raster.grad)),
             adc: block.adc.as_ref().map(|adc| convert_adc(adc, larmor)),
-            triggers: Vec::new(),
+            triggers: block
+                .ext
+                .iter()
+                .filter_map(|ext| match ext {
+                    seq::Extension::Trigger {
+                        typ,
+                        channel,
+                        delay,
+                        duration,
+                    } => Some(super::Trigger {
+                        typ: *typ,
+                        channel: *channel,
+                        delay: *delay,
+                        duration: *duration,
+                    }),
+                    _ => None,
+                })
+                .collect(),
             once: super::Once::Always,
             pmc: false,
         });
