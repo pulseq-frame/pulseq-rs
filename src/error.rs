@@ -4,6 +4,12 @@ use crate::raw::Version;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+pub enum InterpreterError {}
+
+#[derive(Error, Debug)]
+pub enum InterpreterWarning {}
+
+#[derive(Error, Debug)]
 pub enum ShapeDecompressionError {
     #[error("RLE count {value} is not integer at index {index}")]
     RleCountIsNotInteger { index: usize, value: f64 },

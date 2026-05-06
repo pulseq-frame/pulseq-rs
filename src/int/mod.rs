@@ -1,87 +1,41 @@
+use crate::error::{InterpreterError, InterpreterWarning};
+use num_complex::Complex64;
 use std::collections::HashMap;
 use std::ops::{Add, Mul, Sub};
 use std::sync::Arc;
 
-use num_complex::Complex64;
-
-use crate::seq;
-
-pub use crate::raw::RfUse;
-
-/// Sparse sample representation, mirroring `seq::Shape` but with `time` and
-/// `duration` in seconds (already multiplied by the appropriate raster during
-/// seq→int lowering). `int` no longer carries a `time_raster`, since every
-/// shape already knows its own absolute timing.
-///
-/// Invariants: same as `seq::Shape`. `duration` is the total active extent in
-/// seconds and may be larger than `*time.last()` (e.g. for shapes with samples
-/// at centers `[0.5, 1.5, …, N-0.5] * raster`, duration is `N * raster`).
-pub struct Shape<T> {
-    /// Absolute times in seconds for each sample.
-    pub time: Vec<f64>,
-    /// Sample values aligned with `time` 1:1.
-    pub amp: Vec<T>,
-    /// Total active extent in seconds. Not necessarily `*time.last()`.
-    pub duration: f64,
-}
-
-impl<T> Shape<T> {
-    /// Validate invariants. Mirrors `seq::Shape::new` but with `f64` time and
-    /// duration.
-    pub fn new(time: Vec<f64>, amp: Vec<T>, duration: f64) -> Option<Self> {
-        if time.len() != amp.len() || time.is_empty() {
-            return None;
-        }
-        if !time.array_windows().all(|[w1, w2]| w1 < w2) {
-            return None;
-        }
-        if time.iter().any(|&t| t < 0.0 || t > duration) {
-            return None;
-        }
-        Some(Self {
-            time,
-            amp,
-            duration,
-        })
-    }
-}
-
-impl<T> Shape<T>
-where
-    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
-{
-    /// Linear interpolation at `time` (in seconds). Returns `amp[0]` for
-    /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`.
-    #[allow(clippy::indexing_slicing)]
-    pub fn interpolate(&self, time: f64) -> T {
-        if time <= self.time[0] {
-            return self.amp[0];
-        }
-        let last = self.time.len() - 1;
-        if time >= self.time[last] {
-            return self.amp[last];
-        }
-        let idx = self.time.iter().position(|&t| t >= time).unwrap_or(last);
-        let t0 = self.time[idx - 1];
-        let t1 = self.time[idx];
-        let frac = (time - t0) / (t1 - t0);
-        self.amp[idx - 1] + (self.amp[idx] - self.amp[idx - 1]) * frac
-    }
-}
+mod convert;
 
 pub struct Sequence {
     pub name: Option<String>,
     pub blocks: Vec<Block>,
 }
 
-pub struct Data {
-    /// Field of view in `[m]` - applied as gradient scaling.
-    pub fov: [f64; 3],
-    /// Larmor frequency `[Hz]` - used to fold the relative frequency / phase
-    /// (which scale with B0) into the absolute offsets.
-    pub larmor: f64,
-    /// Values for soft delays, keyed by their text id.
-    pub soft_delays: HashMap<String, f64>,
+impl Sequence {
+    /// Parameters:
+    /// - Field of view in `[m]`: applied as gradient scaling.
+    /// - Larmor frequency `[Hz]`: for relative frequency / phase
+    /// - Values for soft delays, keyed by their text id.
+    pub fn from_seq(
+        seq: &crate::seq::Sequence,
+        fov: Option<[f64; 3]>,
+        larmor: f64,
+        soft_delays: HashMap<String, f64>,
+    ) -> Result<(Self, Vec<InterpreterWarning>), InterpreterError> {
+        // The sequence has a FOV and we have an optional FOV input.
+        // If both are set and we have a mismatch scale accordingly.
+        let seq_fov = seq.fov.map_or([1.0; 3], |(x, y, z)| [x, y, z]);
+        let out_fov = fov.unwrap_or(seq_fov);
+        let fov_scale = [
+            out_fov[0] / seq_fov[0],
+            out_fov[1] / seq_fov[1],
+            out_fov[2] / seq_fov[2],
+        ];
+
+        let mut warnings = Vec::new();
+        let seq = convert::convert(seq, fov_scale, larmor, soft_delays, &mut warnings)?;
+        Ok((seq, warnings))
+    }
 }
 
 pub struct Block {
@@ -96,13 +50,15 @@ pub struct Block {
     pub adc: Option<Arc<Adc>>,
     /// Triggers from the `triggers` extension active in this block.
     pub triggers: Vec<Trigger>,
-    /// Repetition gating from the `ONCE` label. `None` = run on every rep.
-    pub once: Option<Once>,
+    /// Repetition gating from the `ONCE` label
+    pub once: Once,
     /// `PMC` label - block can be prospectively motion-corrected.
     pub pmc: bool,
 }
 
+/// tells if block should be measured only in the first or last repetition
 pub enum Once {
+    Always,
     First,
     Last,
 }
@@ -134,7 +90,8 @@ pub struct Rf {
     /// `rf_shims` extension) are stored as length-1 shapes, full pTx shapes
     /// (from the Martin pTx `shim_id` field) keep their per-sample resolution.
     pub shims: Option<Vec<Arc<Shape<Complex64>>>>,
-    pub rf_use: RfUse,
+    /// forwarded from raw sequence - specifies what purpose this pulse has.
+    pub rf_use: crate::raw::RfUse,
 }
 
 pub enum Gradient {
@@ -202,75 +159,63 @@ pub struct Labels {
     pub noise: bool,
 }
 
-// Interpretation diagnostics, grouped by the step that produces them.
-// Severity is a recommendation only - flip an entry from warning to error if a
-// caller wants stricter behaviour (or vice versa) by promoting it in the enum.
-//
-// Step 1 - FOV scaling
-//   error:    fov component is zero, negative or NaN (would silently zero
-//             gradients or produce non-finite amplitudes)
-//   warning:  no_rot / no_scale flag toggled inside a block that already has
-//             gradients (intent is ambiguous - applies from next block)
-//
-// Step 2 - ADC labels
-//   error:    none expected; the parser/seq layer already rejects unknown
-//             label names and non-counter LABELINC targets
-//   warning:  a counter goes negative (legal per spec, but usually a bug)
-//   warning:  LABELSET overrides a non-default value within the same block
-//             (last-write-wins, but the earlier write is dead code)
-//
-// Step 3 - Soft delays
-//   error:    a block references a soft delay whose `text_id` has no entry
-//             in `Data::soft_delays`
-//   error:    two soft-delay extension instances share a `text_id` but
-//             disagree on `t_offset` / `t_factor` (spec violation)
-//   error:    the resulting block duration is negative or non-finite
-//   warning:  resulting duration is not a multiple of the block raster
-//             (we round; caller may want to know)
-//   warning:  `Data::soft_delays` contains keys that are never referenced
-//
-// Step 4 - Frequency / phase unification
-//   error:    `Data::larmor` is zero, negative or NaN
-//
-// Step 5 - Rotation extension
-//   warning:  quaternion is not unit length (we renormalise)
-//   warning:  rotation forces a Trap to be lowered to a Free shape (caller
-//             may care for hardware-specific reasons)
-//   error:    quaternion contains NaN / Inf
-//
-// Step 6 - Once / Pmc / triggers
-//   error:    ONCE label set to a value outside {0, 1, 2}
-//   warning:  trigger `delay + duration` exceeds the block duration
-//   warning:  multiple triggers on the same channel overlap in time
-//
-// Step 7 - Shim unification
-//   error:    a single RF carries both an `rf_shims` extension and a pTx
-//             `shim_id` with conflicting channel counts
-//   error:    a pTx shim shape length differs from the RF shape length
-//   warning:  channel count changes from one RF to the next (legal, but
-//             usually indicates an authoring mistake)
-//
-// Cross-cutting
-//   warning:  an `Extension::Unsupported` was encountered and dropped
-//             (include the `string_id` so the caller can decide whether
-//             that extension actually mattered)
-//
-// Reporting recommendation:
-//   change the signature to
-//       pub fn from_seq(seq: &seq::Sequence, data: Data)
-//           -> Result<(Self, Vec<Warning>), InterpretError>
-//   and add two enums next to the existing `error` module:
-//   - `InterpretError`  - one variant per hard-error case above, wrapped by
-//                         the crate-level `Error` like the other phases
-//   - `Warning`         - one variant per soft-warning case, carrying the
-//                         block id (and where relevant, the offending value)
-//                         so callers can render a useful message
-//   Returning warnings as a `Vec` rather than via a callback keeps `from_seq`
-//   pure and lets the viewer/CLI choose how loud to be (print, ignore, or
-//   promote to errors with `--strict`).
+/// Sparse sample representation, mirroring `seq::Shape` but with `time` and
+/// `duration` in seconds (already multiplied by the appropriate raster during
+/// seq→int lowering). `int` no longer carries a `time_raster`, since every
+/// shape already knows its own absolute timing.
+///
+/// Invariants: same as `seq::Shape`. `duration` is the total active extent in
+/// seconds and may be larger than `*time.last()` (e.g. for shapes with samples
+/// at centers `[0.5, 1.5, …, N-0.5] * raster`, duration is `N * raster`).
+pub struct Shape<T> {
+    /// Absolute times in seconds for each sample.
+    pub time: Vec<f64>,
+    /// Sample values aligned with `time` 1:1.
+    pub amp: Vec<T>,
+    /// Total active extent in seconds. Not necessarily `*time.last()`.
+    pub duration: f64,
+}
 
-impl Sequence {
-    pub fn from_seq(_seq: &seq::Sequence, _data: Data) -> Self {
-        todo!()
+impl<T> Shape<T> {
+    /// Validate invariants. Mirrors `seq::Shape::new` but with `f64` time and
+    /// duration.
+    pub fn new(time: Vec<f64>, amp: Vec<T>, duration: f64) -> Option<Self> {
+        if time.len() != amp.len() || time.is_empty() {
+            return None;
+        }
+        if !time.array_windows().all(|[w1, w2]| w1 < w2) {
+            return None;
+        }
+        if time.iter().any(|&t| t < 0.0 || t > duration) {
+            return None;
+        }
+        Some(Self {
+            time,
+            amp,
+            duration,
+        })
+    }
+}
+
+impl<T> Shape<T>
+where
+    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
+{
+    /// Linear interpolation at `time` (in seconds). Returns `amp[0]` for
+    /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`.
+    #[allow(clippy::indexing_slicing)]
+    pub fn interpolate(&self, time: f64) -> T {
+        if time <= self.time[0] {
+            return self.amp[0];
+        }
+        let last = self.time.len() - 1;
+        if time >= self.time[last] {
+            return self.amp[last];
+        }
+        let idx = self.time.iter().position(|&t| t >= time).unwrap_or(last);
+        let t0 = self.time[idx - 1];
+        let t1 = self.time[idx];
+        let frac = (time - t0) / (t1 - t0);
+        self.amp[idx - 1] + (self.amp[idx] - self.amp[idx - 1]) * frac
     }
 }
