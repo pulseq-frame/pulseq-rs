@@ -318,7 +318,7 @@ fn convert_grad(
     shapes: &mut ShapeLib,
 ) -> Arc<super::Gradient> {
     Arc::new(match g {
-        seq::Gradient::Free { amp, delay, shape } => super::Gradient::Free {
+        seq::Gradient::Free { amp, delay, shape } => super::Gradient {
             amp: amp / fov_scale,
             delay: *delay,
             shape: shapes.get(shape, grad_raster),
@@ -329,12 +329,14 @@ fn convert_grad(
             flat,
             fall,
             delay,
-        } => super::Gradient::Trap {
+        } => super::Gradient {
             amp: amp / fov_scale,
-            rise: *rise,
-            flat: *flat,
-            fall: *fall,
             delay: *delay,
+            shape: Arc::new(super::Shape {
+                time: vec![0.0, *rise, *rise + *flat, *rise + *flat + *fall],
+                amp: vec![0.0, 1.0, 1.0, 0.0],
+                duration: *rise + *flat + *fall,
+            }),
         },
     })
 }
@@ -375,6 +377,12 @@ fn convert_adc(
 struct ShapeLib {
     real: HashMap<(usize, u64), Arc<super::Shape<f64>>>,
     complex: HashMap<(usize, u64), Arc<super::Shape<Complex64>>>,
+    /// Synthesised trapezoid envelopes: `time = [0, rise, rise+flat,
+    /// rise+flat+fall]`, `amp = [0, 1, 1, 0]`. Cached by `(rise, flat, fall)`
+    /// — `delay` and `amp` belong to the gradient, not the shape, so
+    /// dropping them from the key maximises sharing across blocks that
+    /// reuse a trap timing.
+    trap: HashMap<(u64, u64, u64), Arc<super::Shape<f64>>>,
 }
 
 impl ShapeLib {
@@ -405,6 +413,20 @@ impl ShapeLib {
                     time: shape.time.iter().map(|&t| t * raster).collect(),
                     amp: shape.amp.clone(),
                     duration: shape.duration as f64 * raster,
+                })
+            })
+            .clone()
+    }
+
+    fn get_trap(&mut self, rise: f64, flat: f64, fall: f64) -> Arc<super::Shape<f64>> {
+        let key = (rise.to_bits(), flat.to_bits(), fall.to_bits());
+        self.trap
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(super::Shape {
+                    time: vec![0.0, rise, rise + flat, rise + flat + fall],
+                    amp: vec![0.0, 1.0, 1.0, 0.0],
+                    duration: rise + flat + fall,
                 })
             })
             .clone()

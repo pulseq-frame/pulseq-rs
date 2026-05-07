@@ -168,28 +168,13 @@ pub struct Rf {
     pub rf_use: crate::raw::RfUse,
 }
 
-pub enum Gradient {
-    Free {
+/// Remove type distinction - Trap gradients are converted to Free with time shape
+pub struct Gradient {
         /// `[Hz/m]` - already FOV-scaled and rotated.
         amp: f64,
         /// `[s]`
         delay: f64,
         shape: Arc<Shape<f64>>,
-    },
-    Trap {
-        /// `[Hz/m]` - already FOV-scaled. Note: rotating a trapezoid around
-        /// an arbitrary axis only stays a trapezoid when all three channels
-        /// share timings, otherwise the rotation step lowers it to `Free`.
-        amp: f64,
-        /// `[s]`
-        rise: f64,
-        /// `[s]`
-        flat: f64,
-        /// `[s]`
-        fall: f64,
-        /// `[s]`
-        delay: f64,
-    },
 }
 
 pub struct Adc {
