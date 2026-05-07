@@ -50,17 +50,27 @@ pub struct Block {
     pub adc: Option<Arc<Adc>>,
     /// Triggers from the `triggers` extension active in this block.
     pub triggers: Vec<Trigger>,
-    /// Repetition gating from the `ONCE` label
+    /// Label state from the `labelset` / `labelinc` extension.
+    pub labels: BlockLabels,
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct BlockLabels {
+    /// Repetition gating from the `ONCE` label.
     pub once: Once,
     /// `PMC` label - block can be prospectively motion-corrected.
     pub pmc: bool,
+    /// `TRID` counter - marks the start (and identity) of a repeated seq part
+    pub trid: i32,
 }
 
 /// tells if block should be measured only in the first or last repetition
+#[derive(Default, Clone, Copy)]
 pub enum Once {
-    Always,
-    First,
-    Last,
+    #[default]
+    Always = 0,
+    First = 1,
+    Last = 2,
 }
 
 pub struct Trigger {
@@ -148,14 +158,12 @@ pub struct Labels {
     pub lin: i32,
     pub par: i32,
     pub acq: i32,
-    /// Marks the start of a repeatable module (TR boundary).
-    pub trid: i32,
     pub nav: bool,
     pub rev: bool,
     pub sms: bool,
-    /// `REF` flag (renamed - `ref` is a Rust keyword).
-    pub is_ref: bool,
+    pub ref_: bool,
     pub ima: bool,
+    pub off: bool,
     pub noise: bool,
 }
 

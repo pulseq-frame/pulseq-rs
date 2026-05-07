@@ -30,6 +30,11 @@ pub enum InterpreterError {
          no value was provided in the `soft_delays` input"
     )]
     MissingSoftDelay { id: u32, hint: String },
+    #[error(
+        "Block #{block_id}: LABELSET ONCE = {value}, but only 0 (always), \
+         1 (first), and 2 (last) are valid"
+    )]
+    OnceOutOfRange { block_id: u32, value: i32 },
 }
 
 #[derive(Error, Debug)]

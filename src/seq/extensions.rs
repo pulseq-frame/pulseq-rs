@@ -153,6 +153,7 @@ fn parse_label_inner(ext: &'static str, data: &str) -> Result<(i32, ExtLabelFlag
         "NOPOS" => ExtLabelFlag::NoPos,
         "NOSCL" => ExtLabelFlag::NoScl,
         "ONCE" => ExtLabelFlag::Once,
+        "OFF" => ExtLabelFlag::Off,
         "TRID" => ExtLabelFlag::Counter(ExtLabelCounter::Trid),
         other => return Err(ExtensionError::UnknownLabel(other.to_owned())),
     };
@@ -236,6 +237,8 @@ pub enum ExtLabelFlag {
     Ref,
     /// parallel imaging flag indicating imaging data within the ACS region.
     Ima,
+    /// offline flag: do not use this data for online reconstruction
+    Off,
     /// noise adjust scan, for iPAT acceleration.
     Noise,
     /// for MoCo/PMC Pulseq version to recognize blocks that can be prospectively corrected for motion.
@@ -290,6 +293,7 @@ impl Display for ExtLabelFlag {
             ExtLabelFlag::Sms => f.write_str("SMS"),
             ExtLabelFlag::Ref => f.write_str("REF"),
             ExtLabelFlag::Ima => f.write_str("IMA"),
+            ExtLabelFlag::Off => f.write_str("OFF"),
             ExtLabelFlag::Noise => f.write_str("NOISE"),
             ExtLabelFlag::Pmc => f.write_str("PMC"),
             ExtLabelFlag::NoRot => f.write_str("NOROT"),

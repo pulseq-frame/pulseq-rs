@@ -108,6 +108,11 @@ pub fn convert(
     // Track the channel count established by the first explicit shim so we
     // can warn (not error) if later RFs disagree.
     let mut expected_shim_channels: Option<usize> = None;
+    // Sticky label state - all counters and flags start at 0 / false. Each
+    // block's LABELSETs are applied before its LABELINCs (per spec). State
+    // is then snapshotted: ADC-relevant fields go onto `Adc::labels`, the
+    // block-level subset (trid, once, pmc, no_*) onto `Block`.
+    let mut label_state = LabelState::default();
     let mut blocks = Vec::with_capacity(seq.blocks.len());
 
     for block in &seq.blocks {
@@ -171,6 +176,20 @@ pub fn convert(
             }
         }
 
+        // First pass: apply all LABELSETs.
+        for ext in &block.ext {
+            if let seq::Extension::LabelSet { flag, value } = ext {
+                label_state.apply_set(flag, *value, block.id)?;
+            }
+        }
+        // Second pass: apply all LABELINCs.
+        for ext in &block.ext {
+            if let seq::Extension::LabelInc { counter, value } = ext {
+                label_state.apply_inc(counter, *value);
+            }
+        }
+
+        let adc_labels = label_state.to_labels();
         blocks.push(super::Block {
             id: block.id,
             duration,
@@ -187,7 +206,10 @@ pub fn convert(
                 .gz
                 .as_ref()
                 .map(|g| convert_grad(g, fov_scale[2], seq.time_raster.grad)),
-            adc: block.adc.as_ref().map(|adc| convert_adc(adc, larmor)),
+            adc: block
+                .adc
+                .as_ref()
+                .map(|adc| convert_adc(adc, larmor, adc_labels)),
             triggers: block
                 .ext
                 .iter()
@@ -206,8 +228,7 @@ pub fn convert(
                     _ => None,
                 })
                 .collect(),
-            once: super::Once::Always,
-            pmc: false,
+            labels: label_state.to_block_labels(),
         });
     }
 
@@ -296,7 +317,7 @@ fn convert_grad(g: &seq::Gradient, fov_scale: f64, grad_raster: f64) -> Arc<supe
     })
 }
 
-fn convert_adc(adc: &seq::Adc, larmor: f64) -> Arc<super::Adc> {
+fn convert_adc(adc: &seq::Adc, larmor: f64, labels: super::Labels) -> Arc<super::Adc> {
     Arc::new(super::Adc {
         num: adc.num,
         dwell: adc.dwell,
@@ -309,7 +330,7 @@ fn convert_adc(adc: &seq::Adc, larmor: f64) -> Arc<super::Adc> {
             .phase_shape
             .as_ref()
             .map(|s| convert_shape(s, adc.dwell)),
-        labels: super::Labels::default(),
+        labels,
     })
 }
 
@@ -319,4 +340,129 @@ fn convert_shape<T: Clone>(shape: &seq::Shape<T>, raster: f64) -> Arc<super::Sha
         amp: shape.amp.clone(),
         duration: shape.duration as f64 * raster,
     })
+}
+
+/// Aggregated, sticky label state walked across the seq blocks. Three
+/// projections come out:
+///   - `to_labels()` for the `Adc::labels` snapshot,
+///   - `to_block_labels()` for the `Block::labels` snapshot,
+///   - `no_rot` / `no_pos` / `no_scl` are kept here for a future FOV/rotation
+///     step (not yet read by anything; that step will reach into this state).
+#[derive(Default)]
+struct LabelState {
+    // ADC counters
+    slc: i32,
+    seg: i32,
+    rep: i32,
+    avg: i32,
+    set: i32,
+    eco: i32,
+    phs: i32,
+    lin: i32,
+    par: i32,
+    acq: i32,
+    // ADC flags
+    nav: bool,
+    rev: bool,
+    sms: bool,
+    ref_: bool,
+    ima: bool,
+    off: bool,
+    noise: bool,
+    // Block-level (surfaced via BlockLabels)
+    trid: i32,
+    once: super::Once,
+    pmc: bool,
+    // Tracked here only - consumed by the future FOV / rotation step.
+    #[allow(dead_code)]
+    no_rot: bool,
+    #[allow(dead_code)]
+    no_pos: bool,
+    #[allow(dead_code)]
+    no_scl: bool,
+}
+
+impl LabelState {
+    fn to_labels(&self) -> super::Labels {
+        super::Labels {
+            slc: self.slc,
+            seg: self.seg,
+            rep: self.rep,
+            avg: self.avg,
+            set: self.set,
+            eco: self.eco,
+            phs: self.phs,
+            lin: self.lin,
+            par: self.par,
+            acq: self.acq,
+            nav: self.nav,
+            rev: self.rev,
+            sms: self.sms,
+            ref_: self.ref_,
+            ima: self.ima,
+            off: self.off,
+            noise: self.noise,
+        }
+    }
+
+    fn to_block_labels(&self) -> super::BlockLabels {
+        super::BlockLabels {
+            once: self.once,
+            pmc: self.pmc,
+            trid: self.trid,
+        }
+    }
+
+    fn apply_set(
+        &mut self,
+        flag: &seq::extensions::ExtLabelFlag,
+        value: i32,
+        block_id: u32,
+    ) -> Result<(), InterpreterError> {
+        use seq::extensions::ExtLabelFlag as F;
+        let on = value != 0;
+        match flag {
+            F::Counter(c) => *self.counter_mut(c) = value,
+            F::Nav => self.nav = on,
+            F::Rev => self.rev = on,
+            F::Sms => self.sms = on,
+            F::Ref => self.ref_ = on,
+            F::Ima => self.ima = on,
+            F::Off => self.off = on,
+            F::Noise => self.noise = on,
+            F::Pmc => self.pmc = on,
+            F::NoRot => self.no_rot = on,
+            F::NoPos => self.no_pos = on,
+            F::NoScl => self.no_scl = on,
+            F::Once => match value {
+                0 => self.once = super::Once::Always,
+                1 => self.once = super::Once::First,
+                2 => self.once = super::Once::Last,
+                _ => return Err(InterpreterError::OnceOutOfRange { block_id, value }),
+            },
+        }
+        Ok(())
+    }
+
+    fn apply_inc(&mut self, counter: &seq::extensions::ExtLabelCounter, value: i32) {
+        let target = self.counter_mut(counter);
+        *target = target.wrapping_add(value);
+    }
+
+    fn counter_mut(&mut self, counter: &seq::extensions::ExtLabelCounter) -> &mut i32 {
+        use seq::extensions::ExtLabelCounter as C;
+        match counter {
+            C::Slc => &mut self.slc,
+            C::Seg => &mut self.seg,
+            C::Rep => &mut self.rep,
+            C::Avg => &mut self.avg,
+            C::Set => &mut self.set,
+            C::Eco => &mut self.eco,
+            C::Phs => &mut self.phs,
+            C::Lin => &mut self.lin,
+            C::Par => &mut self.par,
+            C::Acq => &mut self.acq,
+            C::Trid => &mut self.trid,
+        }
+    }
 }
