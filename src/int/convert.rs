@@ -113,6 +113,9 @@ pub fn convert(
     // is then snapshotted: ADC-relevant fields go onto `Adc::labels`, the
     // block-level subset (trid, once, pmc, no_*) onto `Block`.
     let mut label_state = LabelState::default();
+    // Memoizes seq → int shape conversions so blocks that share an
+    // `Arc<seq::Shape>` end up sharing a single `Arc<int::Shape>` too.
+    let mut shapes = ShapeLib::default();
     let mut blocks = Vec::with_capacity(seq.blocks.len());
 
     for block in &seq.blocks {
@@ -134,7 +137,13 @@ pub fn convert(
                         _ => {}
                     }
                 }
-                Ok(convert_rf(rf, larmor, seq.time_raster.rf, shims))
+                Ok(convert_rf(
+                    rf,
+                    larmor,
+                    seq.time_raster.rf,
+                    shims,
+                    &mut shapes,
+                ))
             })
             .transpose()?;
 
@@ -196,19 +205,19 @@ pub fn convert(
             gx: block
                 .gx
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[0], seq.time_raster.grad)),
+                .map(|g| convert_grad(g, fov_scale[0], seq.time_raster.grad, &mut shapes)),
             gy: block
                 .gy
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[1], seq.time_raster.grad)),
+                .map(|g| convert_grad(g, fov_scale[1], seq.time_raster.grad, &mut shapes)),
             gz: block
                 .gz
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[2], seq.time_raster.grad)),
+                .map(|g| convert_grad(g, fov_scale[2], seq.time_raster.grad, &mut shapes)),
             adc: block
                 .adc
                 .as_ref()
-                .map(|adc| convert_adc(adc, larmor, label_state.adc_labels)),
+                .map(|adc| convert_adc(adc, larmor, label_state.adc_labels, &mut shapes)),
             triggers: block
                 .ext
                 .iter()
@@ -280,6 +289,7 @@ fn convert_rf(
     larmor: f64,
     rf_raster: f64,
     shims: Vec<Complex64>,
+    shapes: &mut ShapeLib,
 ) -> Arc<super::Rf> {
     Arc::new(super::Rf {
         amp: rf.amp,
@@ -287,18 +297,23 @@ fn convert_rf(
         delay: rf.delay,
         center: rf.center,
         freq: rf.freq.0 * larmor + rf.freq.1,
-        shape: convert_shape(&rf.shape, rf_raster),
+        shape: shapes.get_complex(&rf.shape, rf_raster),
         shims,
         rf_use: rf.rf_use,
     })
 }
 
-fn convert_grad(g: &seq::Gradient, fov_scale: f64, grad_raster: f64) -> Arc<super::Gradient> {
+fn convert_grad(
+    g: &seq::Gradient,
+    fov_scale: f64,
+    grad_raster: f64,
+    shapes: &mut ShapeLib,
+) -> Arc<super::Gradient> {
     Arc::new(match g {
         seq::Gradient::Free { amp, delay, shape } => super::Gradient::Free {
             amp: amp / fov_scale,
             delay: *delay,
-            shape: convert_shape(shape, grad_raster),
+            shape: shapes.get(shape, grad_raster),
         },
         seq::Gradient::Trap {
             amp,
@@ -316,7 +331,12 @@ fn convert_grad(g: &seq::Gradient, fov_scale: f64, grad_raster: f64) -> Arc<supe
     })
 }
 
-fn convert_adc(adc: &seq::Adc, larmor: f64, labels: super::Labels) -> Arc<super::Adc> {
+fn convert_adc(
+    adc: &seq::Adc,
+    larmor: f64,
+    labels: super::Labels,
+    shapes: &mut ShapeLib,
+) -> Arc<super::Adc> {
     Arc::new(super::Adc {
         num: adc.num,
         dwell: adc.dwell,
@@ -325,20 +345,62 @@ fn convert_adc(adc: &seq::Adc, larmor: f64, labels: super::Labels) -> Arc<super:
         phase: adc.phase.0 * larmor + adc.phase.1,
         // ADC phase shapes are sampled per-ADC-sample at `dwell`, so we
         // multiply the seq tick-domain time by `dwell` to get seconds.
-        phase_shape: adc
-            .phase_shape
-            .as_ref()
-            .map(|s| convert_shape(s, adc.dwell)),
+        phase_shape: adc.phase_shape.as_ref().map(|s| shapes.get(s, adc.dwell)),
         labels,
     })
 }
 
-fn convert_shape<T: Clone>(shape: &seq::Shape<T>, raster: f64) -> Arc<super::Shape<T>> {
-    Arc::new(super::Shape {
-        time: shape.time.iter().map(|&t| t * raster).collect(),
-        amp: shape.amp.clone(),
-        duration: shape.duration as f64 * raster,
-    })
+// TODO: might be worth it to write a generic shape lib shared by raw->seq and
+// seq->int conversion?
+//
+/// Memoizes seq → int shape conversions so repeated references to the same
+/// `Arc<seq::Shape>` produce a single shared `Arc<int::Shape>`. Mirrors the
+/// role of `seq::convert::ShapeLib` at the previous stage.
+///
+/// Cache key is `(Arc::as_ptr as usize, raster.to_bits())`: pointer identity
+/// of the input shape combined with the raster used to lift it into seconds.
+/// The raster is part of the key because ADC phase shapes are converted with
+/// `dwell`, which can differ per ADC even when the same seq shape is reused.
+/// Pointer reuse can't happen during conversion because the seq `Sequence`
+/// (which owns those shapes) outlives this function.
+#[derive(Default)]
+struct ShapeLib {
+    real: HashMap<(usize, u64), Arc<super::Shape<f64>>>,
+    complex: HashMap<(usize, u64), Arc<super::Shape<Complex64>>>,
+}
+
+impl ShapeLib {
+    fn get(&mut self, shape: &Arc<seq::Shape<f64>>, raster: f64) -> Arc<super::Shape<f64>> {
+        let key = (Arc::as_ptr(shape) as usize, raster.to_bits());
+        self.real
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(super::Shape {
+                    time: shape.time.iter().map(|&t| t * raster).collect(),
+                    amp: shape.amp.clone(),
+                    duration: shape.duration as f64 * raster,
+                })
+            })
+            .clone()
+    }
+
+    fn get_complex(
+        &mut self,
+        shape: &Arc<seq::Shape<Complex64>>,
+        raster: f64,
+    ) -> Arc<super::Shape<Complex64>> {
+        let key = (Arc::as_ptr(shape) as usize, raster.to_bits());
+        self.complex
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(super::Shape {
+                    time: shape.time.iter().map(|&t| t * raster).collect(),
+                    amp: shape.amp.clone(),
+                    duration: shape.duration as f64 * raster,
+                })
+            })
+            .clone()
+    }
 }
 
 #[derive(Default)]
