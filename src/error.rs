@@ -31,10 +31,14 @@ pub enum InterpreterError {
     )]
     MissingSoftDelay { id: u32, hint: String },
     #[error(
-        "Block #{block_id}: LABELSET ONCE = {value}, but only 0 (always), \
-         1 (first), and 2 (last) are valid"
+        "Block #{block_id}: LABELSET {flag} = {value}, but boolean flags only \
+         accept 0 or 1"
     )]
-    OnceOutOfRange { block_id: u32, value: i32 },
+    FlagSetNonBoolean {
+        block_id: u32,
+        flag: String,
+        value: i32,
+    },
 }
 
 #[derive(Error, Debug)]

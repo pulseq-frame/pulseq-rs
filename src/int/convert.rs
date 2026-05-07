@@ -420,9 +420,34 @@ impl LabelState {
         block_id: u32,
     ) -> Result<(), InterpreterError> {
         use seq::extensions::ExtLabelFlag as F;
-        let on = value != 0;
+        // Counter and ONCE accept any i32; everything else must be 0 or 1.
         match flag {
-            F::Counter(c) => *self.counter_mut(c) = value,
+            F::Counter(c) => {
+                *self.counter_mut(c) = value;
+                return Ok(());
+            }
+            F::Once => {
+                self.once = match value {
+                    0 => super::Once::Always,
+                    1 => super::Once::First,
+                    _ => super::Once::Last,
+                };
+                return Ok(());
+            }
+            _ => {}
+        }
+        let on = match value {
+            0 => false,
+            1 => true,
+            _ => {
+                return Err(InterpreterError::FlagSetNonBoolean {
+                    block_id,
+                    flag: flag.to_string(),
+                    value,
+                });
+            }
+        };
+        match flag {
             F::Nav => self.nav = on,
             F::Rev => self.rev = on,
             F::Sms => self.sms = on,
@@ -434,12 +459,8 @@ impl LabelState {
             F::NoRot => self.no_rot = on,
             F::NoPos => self.no_pos = on,
             F::NoScl => self.no_scl = on,
-            F::Once => match value {
-                0 => self.once = super::Once::Always,
-                1 => self.once = super::Once::First,
-                2 => self.once = super::Once::Last,
-                _ => return Err(InterpreterError::OnceOutOfRange { block_id, value }),
-            },
+            // Counter / Once handled above by early-return.
+            F::Counter(_) | F::Once => {}
         }
         Ok(())
     }
