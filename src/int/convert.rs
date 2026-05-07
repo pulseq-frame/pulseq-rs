@@ -189,7 +189,6 @@ pub fn convert(
             }
         }
 
-        let adc_labels = label_state.to_labels();
         blocks.push(super::Block {
             id: block.id,
             duration,
@@ -209,7 +208,7 @@ pub fn convert(
             adc: block
                 .adc
                 .as_ref()
-                .map(|adc| convert_adc(adc, larmor, adc_labels)),
+                .map(|adc| convert_adc(adc, larmor, label_state.adc_labels)),
             triggers: block
                 .ext
                 .iter()
@@ -228,7 +227,7 @@ pub fn convert(
                     _ => None,
                 })
                 .collect(),
-            labels: label_state.to_block_labels(),
+            labels: label_state.block_labels,
         });
     }
 
@@ -342,77 +341,20 @@ fn convert_shape<T: Clone>(shape: &seq::Shape<T>, raster: f64) -> Arc<super::Sha
     })
 }
 
-/// Aggregated, sticky label state walked across the seq blocks. Three
-/// projections come out:
-///   - `to_labels()` for the `Adc::labels` snapshot,
-///   - `to_block_labels()` for the `Block::labels` snapshot,
-///   - `no_rot` / `no_pos` / `no_scl` are kept here for a future FOV/rotation
-///     step (not yet read by anything; that step will reach into this state).
 #[derive(Default)]
 struct LabelState {
-    // ADC counters
-    slc: i32,
-    seg: i32,
-    rep: i32,
-    avg: i32,
-    set: i32,
-    eco: i32,
-    phs: i32,
-    lin: i32,
-    par: i32,
-    acq: i32,
-    // ADC flags
-    nav: bool,
-    rev: bool,
-    sms: bool,
-    ref_: bool,
-    ima: bool,
-    off: bool,
-    noise: bool,
-    // Block-level (surfaced via BlockLabels)
-    trid: i32,
-    once: super::Once,
-    pmc: bool,
-    // Tracked here only - consumed by the future FOV / rotation step.
-    #[allow(dead_code)]
+    adc_labels: super::Labels,
+    block_labels: super::BlockLabels,
+    
+    /// Disable FOV rotations for the current block
     no_rot: bool,
-    #[allow(dead_code)]
+    /// Disable FOV positioning for the current block
     no_pos: bool,
-    #[allow(dead_code)]
+    /// Disable FOV scaling for the current block
     no_scl: bool,
 }
 
 impl LabelState {
-    fn to_labels(&self) -> super::Labels {
-        super::Labels {
-            slc: self.slc,
-            seg: self.seg,
-            rep: self.rep,
-            avg: self.avg,
-            set: self.set,
-            eco: self.eco,
-            phs: self.phs,
-            lin: self.lin,
-            par: self.par,
-            acq: self.acq,
-            nav: self.nav,
-            rev: self.rev,
-            sms: self.sms,
-            ref_: self.ref_,
-            ima: self.ima,
-            off: self.off,
-            noise: self.noise,
-        }
-    }
-
-    fn to_block_labels(&self) -> super::BlockLabels {
-        super::BlockLabels {
-            once: self.once,
-            pmc: self.pmc,
-            trid: self.trid,
-        }
-    }
-
     fn apply_set(
         &mut self,
         flag: &seq::extensions::ExtLabelFlag,
@@ -427,7 +369,7 @@ impl LabelState {
                 return Ok(());
             }
             F::Once => {
-                self.once = match value {
+                self.block_labels.once = match value {
                     0 => super::Once::Always,
                     1 => super::Once::First,
                     _ => super::Once::Last,
@@ -448,19 +390,19 @@ impl LabelState {
             }
         };
         match flag {
-            F::Nav => self.nav = on,
-            F::Rev => self.rev = on,
-            F::Sms => self.sms = on,
-            F::Ref => self.ref_ = on,
-            F::Ima => self.ima = on,
-            F::Off => self.off = on,
-            F::Noise => self.noise = on,
-            F::Pmc => self.pmc = on,
+            F::Nav => self.adc_labels.nav = on,
+            F::Rev => self.adc_labels.rev = on,
+            F::Sms => self.adc_labels.sms = on,
+            F::Ref => self.adc_labels.ref_ = on,
+            F::Ima => self.adc_labels.ima = on,
+            F::Off => self.adc_labels.off = on,
+            F::Noise => self.adc_labels.noise = on,
+            F::Pmc => self.block_labels.pmc = on,
             F::NoRot => self.no_rot = on,
             F::NoPos => self.no_pos = on,
             F::NoScl => self.no_scl = on,
-            // Counter / Once handled above by early-return.
-            F::Counter(_) | F::Once => {}
+            // Counters / Once handled above by early-return.
+            F::Counter(_) | F::Once => unreachable!()
         }
         Ok(())
     }
@@ -473,17 +415,17 @@ impl LabelState {
     fn counter_mut(&mut self, counter: &seq::extensions::ExtLabelCounter) -> &mut i32 {
         use seq::extensions::ExtLabelCounter as C;
         match counter {
-            C::Slc => &mut self.slc,
-            C::Seg => &mut self.seg,
-            C::Rep => &mut self.rep,
-            C::Avg => &mut self.avg,
-            C::Set => &mut self.set,
-            C::Eco => &mut self.eco,
-            C::Phs => &mut self.phs,
-            C::Lin => &mut self.lin,
-            C::Par => &mut self.par,
-            C::Acq => &mut self.acq,
-            C::Trid => &mut self.trid,
+            C::Slc => &mut self.adc_labels.slc,
+            C::Seg => &mut self.adc_labels.seg,
+            C::Rep => &mut self.adc_labels.rep,
+            C::Avg => &mut self.adc_labels.avg,
+            C::Set => &mut self.adc_labels.set,
+            C::Eco => &mut self.adc_labels.eco,
+            C::Phs => &mut self.adc_labels.phs,
+            C::Lin => &mut self.adc_labels.lin,
+            C::Par => &mut self.adc_labels.par,
+            C::Acq => &mut self.adc_labels.acq,
+            C::Trid => &mut self.block_labels.trid,
         }
     }
 }
