@@ -34,24 +34,87 @@ impl Sequence {
     }
 }
 
-/// Affine transform applied to the sequence during interpretation. The 3x3
-/// part (`m[..][0..3]`) rotates and scales gradients; the last column
-/// (`m[..][3]`) translates the FOV centre. Stored row-major: row `i` is the
-/// output X / Y / Z axis. `Default` returns the identity transform — no
-/// rotation, no scale, no translation.
-pub struct Fov(pub [[f64; 4]; 3]);
+// Quaternions and FOV deserve their own math module with tests
+#[derive(Clone, Copy)]
+pub struct Quaternion(pub [f64; 4]);
 
-impl Default for Fov {
+impl Default for Quaternion {
     fn default() -> Self {
+        Self([1.0, 0.0, 0.0, 0.0])
+    }
+}
+
+impl Mul for Quaternion {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let x = self.0;
+        let y = rhs.0;
         Self([
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
+            x[0] * y[0] - x[1] * y[1] - x[2] * y[2] - x[3] * y[3],
+            x[0] * y[1] + x[1] * y[0] + x[2] * y[3] - x[3] * y[2],
+            x[0] * y[2] - x[1] * y[3] + x[2] * y[0] + x[3] * y[1],
+            x[0] * y[3] + x[1] * y[2] - x[2] * y[1] + x[3] * y[0],
         ])
     }
 }
 
+impl Quaternion {
+    pub fn norm(&self) -> f64 {
+        (self.0[0].powi(2) + self.0[1].powi(2) + self.0[2].powi(2) + self.0[3].powi(2)).sqrt()
+    }
+
+    pub fn is_unit(&self) -> bool {
+        const EPS: f64 = 1e-9;
+        (1.0 - self.norm()).abs() <= EPS
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Fov {
+    pub scale: f64,
+    pub rotation: Quaternion,
+    /// Position will be ignored by the interpreter until I know how to apply it
+    pub position: [f64; 3],
+}
+
+impl Default for Fov {
+    fn default() -> Self {
+        Self {
+            scale: 1.0,
+            rotation: Quaternion::default(),
+            position: [0.0; 3],
+        }
+    }
+}
+
 impl Fov {
+    /// converts the user defined FOV into a 3x3 transformation matrix that can
+    /// be applied directly onto gradients to realize the scaling / rotation.
+    /// This means inverting the scale *and the rotation!*
+    pub fn to_grad_transform(self) -> [[f64; 3]; 3] {
+        let q = self.rotation.0;
+        let q = [q[0], -q[1], -q[2], -q[3]];
+        let s = 1.0 / self.scale;
+        [
+            [
+                s * (1.0 - 2.0 * (q[2].powi(2) + q[3].powi(2))),
+                s * (2.0 * (q[1] * q[2] - q[0] * q[3])),
+                s * (2.0 * (q[1] * q[3] + q[0] * q[2])),
+            ],
+            [
+                s * (2.0 * (q[1] * q[2] + q[0] * q[3])),
+                s * (1.0 - 2.0 * (q[1].powi(2) + q[3].powi(2))),
+                s * (2.0 * (q[2] * q[3] - q[0] * q[1])),
+            ],
+            [
+                s * (2.0 * (q[1] * q[3] - q[0] * q[2])),
+                s * (2.0 * (q[2] * q[3] + q[0] * q[1])),
+                s * (1.0 - 2.0 * (q[1].powi(2) + q[2].powi(2))),
+            ],
+        ]
+    }
+
     /// Returns `true` iff the 3x3 part is a uniformly-scaled rotation /
     /// reflection — orthogonal columns with all three column norms equal.
     /// The common scale `s = ||c_i||` may be any positive finite value.
@@ -59,46 +122,12 @@ impl Fov {
     /// non-orthogonal columns, and a zero-scale degenerate matrix all fail.
     #[allow(clippy::indexing_slicing)]
     pub fn validate(&self) -> bool {
-        const TOL: f64 = 1e-9;
-        let m = &self.0;
-        let norms = [
-            (m[0][0].powi(2) + m[1][0].powi(2) + m[2][0].powi(2)).sqrt(),
-            (m[0][1].powi(2) + m[1][1].powi(2) + m[2][1].powi(2)).sqrt(),
-            (m[0][2].powi(2) + m[1][2].powi(2) + m[2][2].powi(2)).sqrt(),
-        ];
-        let s = norms[0];
-        if !s.is_finite() || s <= 0.0 {
-            return false;
-        }
-        // Uniform scale: every column norm equals `s` within relative tolerance.
-        let rel = s * TOL;
-        if (norms[1] - s).abs() > rel || (norms[2] - s).abs() > rel {
-            return false;
-        }
-        // Orthogonal columns: pairwise dot products = 0. Tolerance scales
-        // with s² because that's the natural magnitude of the dot product.
-        let abs = s * s * TOL;
-        for j1 in 0..3 {
-            for j2 in (j1 + 1)..3 {
-                let dot = m[0][j1] * m[0][j2] + m[1][j1] * m[1][j2] + m[2][j1] * m[2][j2];
-                if dot.abs() > abs {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-
-    /// Per-axis scale factors (column norms of the 3x3 part). For a valid
-    /// (uniformly-scaled) matrix all three entries are equal.
-    #[allow(clippy::indexing_slicing)]
-    pub fn scale(&self) -> [f64; 3] {
-        let m = &self.0;
-        [
-            (m[0][0].powi(2) + m[1][0].powi(2) + m[2][0].powi(2)).sqrt(),
-            (m[0][1].powi(2) + m[1][1].powi(2) + m[2][1].powi(2)).sqrt(),
-            (m[0][2].powi(2) + m[1][2].powi(2) + m[2][2].powi(2)).sqrt(),
-        ]
+        0.0 < self.scale
+            && self.scale.is_finite()
+            && self.position[0].is_finite()
+            && self.position[1].is_finite()
+            && self.position[2].is_finite()
+            && self.rotation.is_unit()
     }
 }
 
@@ -170,11 +199,11 @@ pub struct Rf {
 
 /// Remove type distinction - Trap gradients are converted to Free with time shape
 pub struct Gradient {
-        /// `[Hz/m]` - already FOV-scaled and rotated.
-        amp: f64,
-        /// `[s]`
-        delay: f64,
-        shape: Arc<Shape<f64>>,
+    /// `[Hz/m]` - already FOV-scaled and rotated.
+    pub amp: f64,
+    /// `[s]`
+    pub delay: f64,
+    pub shape: Arc<Shape<f64>>,
 }
 
 pub struct Adc {

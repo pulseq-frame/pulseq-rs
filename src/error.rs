@@ -23,6 +23,11 @@ pub enum InterpreterError {
          one is allowed per block"
     )]
     MultipleShimmingExtensions { block_id: u32 },
+    #[error(
+        "Block #{block_id}: multiple `rotations` extension instances — only \
+         one is allowed per block"
+    )]
+    MultipleRotationExtensions { block_id: u32 },
     #[error("Block #{block_id}: encountered a shim with zero channels")]
     EmptyShim { block_id: u32 },
     #[error(

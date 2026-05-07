@@ -71,6 +71,7 @@ use std::sync::Arc;
 use num_complex::Complex64;
 
 use crate::error::{InterpreterError, InterpreterWarning};
+use crate::int::{Fov, Quaternion};
 use crate::seq;
 
 /// Lowers a seq sequence into the int form, folding the relative
@@ -97,16 +98,11 @@ pub fn convert(
         }
     }
 
-    // Per-axis gradient scaling = column norms of the 3x3 part. Output FOV
-    // = scale * seq.fov (with seq.fov defaulting to [1, 1, 1] when unset).
-    // Rotation and translation parts of the matrix are not applied yet.
-    let fov_scale = fov.scale();
-    let seq_fov = seq.fov.map_or([1.0; 3], |(x, y, z)| [x, y, z]);
-    let out_fov = [
-        fov_scale[0] * seq_fov[0],
-        fov_scale[1] * seq_fov[1],
-        fov_scale[2] * seq_fov[2],
-    ];
+    // Update the (purely informative) sequence FOV to account for scaling:
+    let out_fov = {
+        let s = fov.scale;
+        seq.fov.map_or([s; 3], |(x, y, z)| [s * x, s * y, s * z])
+    };
 
     // Track the channel count established by the first explicit shim so we
     // can warn (not error) if later RFs disagree.
@@ -119,6 +115,9 @@ pub fn convert(
     // Memoizes seq → int shape conversions so blocks that share an
     // `Arc<seq::Shape>` end up sharing a single `Arc<int::Shape>` too.
     let mut shapes = ShapeLib::default();
+    // Memoizes int::Gradient lookups across blocks, keyed by structural
+    // identity (amp, delay, shape ptr from ShapeLib).
+    let mut grads = GradLib::default();
     let mut blocks = Vec::with_capacity(seq.blocks.len());
 
     for block in &seq.blocks {
@@ -199,28 +198,50 @@ pub fn convert(
             }
         }
 
-        let amp_scale = if label_state.no_scl {
-            [1.0; 3]
-        } else {
-            fov_scale
-        };
+        // Compute gradient transform for current block, starting with rot ext.
+        // Default quaternion `[1, 0, 0, 0]` is the identity rotation; any
+        // `rotations` extension on the block overrides it. Two or more
+        // instances on the same block are ambiguous and rejected.
+        let mut rot_iter = block.ext.iter().filter_map(|e| match e {
+            seq::Extension::Rotation { quat } => Some(Quaternion(*quat)),
+            _ => None,
+        });
+        let rot_extension = rot_iter.next().unwrap_or_default();
+        if rot_iter.next().is_some() {
+            return Err(InterpreterError::MultipleRotationExtensions { block_id: block.id });
+        }
+
+        // This is the full scanner transform of the sequence (PMC missing)
+        let mut transform = fov;
+        transform.rotation = transform.rotation * rot_extension;
+        // Narrow it down if the seq flags were set
+        if label_state.no_rot {
+            transform.rotation = rot_extension;
+        }
+        if label_state.no_scl {
+            transform.scale = 1.0;
+        }
+        if label_state.no_pos {
+            transform.position = [0.0; 3];
+        }
+
+        let (gx, gy, gz) = transform_grad(
+            block.gx.as_deref(),
+            block.gy.as_deref(),
+            block.gz.as_deref(),
+            transform,
+            seq.time_raster.grad,
+            &mut shapes,
+            &mut grads,
+        );
 
         blocks.push(super::Block {
             id: block.id,
             duration,
             rf,
-            gx: block
-                .gx
-                .as_ref()
-                .map(|g| convert_grad(g, amp_scale[0], seq.time_raster.grad, &mut shapes)),
-            gy: block
-                .gy
-                .as_ref()
-                .map(|g| convert_grad(g, amp_scale[1], seq.time_raster.grad, &mut shapes)),
-            gz: block
-                .gz
-                .as_ref()
-                .map(|g| convert_grad(g, amp_scale[2], seq.time_raster.grad, &mut shapes)),
+            gx,
+            gy,
+            gz,
             adc: block
                 .adc
                 .as_ref()
@@ -311,34 +332,93 @@ fn convert_rf(
     })
 }
 
-fn convert_grad(
+/// Resolves a single seq gradient to its `(amp, delay, int_shape)` triple.
+/// Trap and Free both end up with a memoized `Arc<int::Shape<f64>>`; for
+/// Trap that's the synthesised `[0, 1, 1, 0]` envelope, for Free it's the
+/// per-sample shape from the raw file.
+fn lookup_grad(
     g: &seq::Gradient,
-    fov_scale: f64,
     grad_raster: f64,
     shapes: &mut ShapeLib,
-) -> Arc<super::Gradient> {
-    Arc::new(match g {
-        seq::Gradient::Free { amp, delay, shape } => super::Gradient {
-            amp: amp / fov_scale,
-            delay: *delay,
-            shape: shapes.get(shape, grad_raster),
-        },
+) -> (f64, f64, Arc<super::Shape<f64>>) {
+    match g {
+        seq::Gradient::Free { amp, delay, shape } => (*amp, *delay, shapes.get(shape, grad_raster)),
         seq::Gradient::Trap {
             amp,
             rise,
             flat,
             fall,
             delay,
-        } => super::Gradient {
-            amp: amp / fov_scale,
-            delay: *delay,
-            shape: Arc::new(super::Shape {
-                time: vec![0.0, *rise, *rise + *flat, *rise + *flat + *fall],
-                amp: vec![0.0, 1.0, 1.0, 0.0],
-                duration: *rise + *flat + *fall,
-            }),
-        },
-    })
+        } => (*amp, *delay, shapes.get_trap(*rise, *flat, *fall)),
+    }
+}
+
+/// Applies the FOV transform (scale + rotation) across all three gradient
+/// axes at once. With identity rotation each output axis is independent and
+/// the result matches per-axis scaling. With a non-identity rotation every
+/// present input must share the same `int::Shape` Arc (after `ShapeLib`
+/// lookup) and the same `delay`; otherwise we `unimplemented!()`. `None`
+/// axes can become `Some` if rotation projects onto them.
+fn transform_grad(
+    gx: Option<&seq::Gradient>,
+    gy: Option<&seq::Gradient>,
+    gz: Option<&seq::Gradient>,
+    transform: Fov,
+    grad_raster: f64,
+    shapes: &mut ShapeLib,
+    grads: &mut GradLib,
+) -> (
+    Option<Arc<super::Gradient>>,
+    Option<Arc<super::Gradient>>,
+    Option<Arc<super::Gradient>>,
+) {
+    let lookups: [Option<(f64, f64, Arc<super::Shape<f64>>)>; 3] = [
+        gx.map(|g| lookup_grad(g, grad_raster, shapes)),
+        gy.map(|g| lookup_grad(g, grad_raster, shapes)),
+        gz.map(|g| lookup_grad(g, grad_raster, shapes)),
+    ];
+
+    // Pick the first present axis as the reference. If nothing is present
+    // there's no gradient — rotation has nothing to project from.
+    let Some((_, ref_delay, ref_shape)) = lookups.iter().find_map(|opt| opt.as_ref()).cloned()
+    else {
+        return (None, None, None);
+    };
+
+    // Every other present axis must agree on shape and delay. Arc::ptr_eq
+    // catches Trap+Free mixes, mismatched trap timings, and different free
+    // shapes uniformly because ShapeLib gives the same Arc only for inputs
+    // that share both kind and parameters.
+    for opt in lookups.iter().flatten() {
+        let (_, delay, shape) = opt;
+        if *delay != ref_delay || !Arc::ptr_eq(shape, &ref_shape) {
+            unimplemented!(
+                "transform_grad: rotation across axes with different shapes \
+                     or delays is not supported yet"
+            );
+        }
+    }
+
+    let amps = [
+        lookups[0].as_ref().map_or(0.0, |(a, _, _)| *a),
+        lookups[1].as_ref().map_or(0.0, |(a, _, _)| *a),
+        lookups[2].as_ref().map_or(0.0, |(a, _, _)| *a),
+    ];
+    let m = transform.to_grad_transform();
+    let out = [
+        m[0][0] * amps[0] + m[0][1] * amps[1] + m[0][2] * amps[2],
+        m[1][0] * amps[0] + m[1][1] * amps[1] + m[1][2] * amps[2],
+        m[2][0] * amps[0] + m[2][1] * amps[1] + m[2][2] * amps[2],
+    ];
+
+    let mut emit = |amp: f64| -> Option<Arc<super::Gradient>> {
+        if amp == 0.0 {
+            None
+        } else {
+            Some(grads.get(amp, ref_delay, ref_shape.clone()))
+        }
+    };
+    (emit(out[0]), emit(out[1]), emit(out[2]))
 }
 
 fn convert_adc(
@@ -429,6 +509,25 @@ impl ShapeLib {
                     duration: rise + flat + fall,
                 })
             })
+            .clone()
+    }
+}
+
+/// Memoizes int::Gradient lookups so that two blocks producing the same
+/// `(amp, delay, shape)` triple share an `Arc<int::Gradient>`. Cache key is
+/// `(amp_bits, shape_ptr, delay_bits)`; the shape pointer comes from
+/// `ShapeLib` so equal seq inputs already collapse to the same int shape.
+#[derive(Default)]
+struct GradLib {
+    cache: HashMap<(u64, usize, u64), Arc<super::Gradient>>,
+}
+
+impl GradLib {
+    fn get(&mut self, amp: f64, delay: f64, shape: Arc<super::Shape<f64>>) -> Arc<super::Gradient> {
+        let key = (amp.to_bits(), Arc::as_ptr(&shape) as usize, delay.to_bits());
+        self.cache
+            .entry(key)
+            .or_insert_with(|| Arc::new(super::Gradient { amp, delay, shape }))
             .clone()
     }
 }
