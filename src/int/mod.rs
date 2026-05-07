@@ -8,33 +8,97 @@ mod convert;
 
 pub struct Sequence {
     pub name: Option<String>,
+    /// Per-axis FOV `[m]` - based on [1, 1, 1] if .seq file did not define FOV
+    pub fov: [f64; 3],
     pub blocks: Vec<Block>,
 }
 
 impl Sequence {
     /// Parameters:
-    /// - Field of view in `[m]`: applied as gradient scaling.
-    /// - Larmor frequency `[Hz]`: for relative frequency / phase
-    /// - Values for soft delays, keyed by their text id.
+    /// - `fov`: 3x4 affine transform applied to the sequence, must be unitary.
+    /// - `larmor`: Larmor frequency `[Hz]` - used for relative freq/phase.
+    /// - `soft_delays`: values for soft delays, keyed by their hint string.
     pub fn from_seq(
         seq: &crate::seq::Sequence,
-        fov: Option<[f64; 3]>,
+        fov: Fov,
         larmor: f64,
         soft_delays: HashMap<String, f64>,
     ) -> Result<(Self, Vec<InterpreterWarning>), InterpreterError> {
-        // The sequence has a FOV and we have an optional FOV input.
-        // If both are set and we have a mismatch scale accordingly.
-        let seq_fov = seq.fov.map_or([1.0; 3], |(x, y, z)| [x, y, z]);
-        let out_fov = fov.unwrap_or(seq_fov);
-        let fov_scale = [
-            out_fov[0] / seq_fov[0],
-            out_fov[1] / seq_fov[1],
-            out_fov[2] / seq_fov[2],
-        ];
+        if !fov.validate() {
+            return Err(InterpreterError::NonUnitaryFov);
+        }
 
         let mut warnings = Vec::new();
-        let seq = convert::convert(seq, fov_scale, larmor, soft_delays, &mut warnings)?;
+        let seq = convert::convert(seq, fov, larmor, soft_delays, &mut warnings)?;
         Ok((seq, warnings))
+    }
+}
+
+/// Affine transform applied to the sequence during interpretation. The 3x3
+/// part (`m[..][0..3]`) rotates and scales gradients; the last column
+/// (`m[..][3]`) translates the FOV centre. Stored row-major: row `i` is the
+/// output X / Y / Z axis. `Default` returns the identity transform — no
+/// rotation, no scale, no translation.
+pub struct Fov(pub [[f64; 4]; 3]);
+
+impl Default for Fov {
+    fn default() -> Self {
+        Self([
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+        ])
+    }
+}
+
+impl Fov {
+    /// Returns `true` iff the 3x3 part is a uniformly-scaled rotation /
+    /// reflection — orthogonal columns with all three column norms equal.
+    /// The common scale `s = ||c_i||` may be any positive finite value.
+    /// Pure rotation (`s == 1`) passes; non-uniform scale, shear,
+    /// non-orthogonal columns, and a zero-scale degenerate matrix all fail.
+    #[allow(clippy::indexing_slicing)]
+    pub fn validate(&self) -> bool {
+        const TOL: f64 = 1e-9;
+        let m = &self.0;
+        let norms = [
+            (m[0][0].powi(2) + m[1][0].powi(2) + m[2][0].powi(2)).sqrt(),
+            (m[0][1].powi(2) + m[1][1].powi(2) + m[2][1].powi(2)).sqrt(),
+            (m[0][2].powi(2) + m[1][2].powi(2) + m[2][2].powi(2)).sqrt(),
+        ];
+        let s = norms[0];
+        if !s.is_finite() || s <= 0.0 {
+            return false;
+        }
+        // Uniform scale: every column norm equals `s` within relative tolerance.
+        let rel = s * TOL;
+        if (norms[1] - s).abs() > rel || (norms[2] - s).abs() > rel {
+            return false;
+        }
+        // Orthogonal columns: pairwise dot products = 0. Tolerance scales
+        // with s² because that's the natural magnitude of the dot product.
+        let abs = s * s * TOL;
+        for j1 in 0..3 {
+            for j2 in (j1 + 1)..3 {
+                let dot = m[0][j1] * m[0][j2] + m[1][j1] * m[1][j2] + m[2][j1] * m[2][j2];
+                if dot.abs() > abs {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// Per-axis scale factors (column norms of the 3x3 part). For a valid
+    /// (uniformly-scaled) matrix all three entries are equal.
+    #[allow(clippy::indexing_slicing)]
+    pub fn scale(&self) -> [f64; 3] {
+        let m = &self.0;
+        [
+            (m[0][0].powi(2) + m[1][0].powi(2) + m[2][0].powi(2)).sqrt(),
+            (m[0][1].powi(2) + m[1][1].powi(2) + m[2][1].powi(2)).sqrt(),
+            (m[0][2].powi(2) + m[1][2].powi(2) + m[2][2].powi(2)).sqrt(),
+        ]
     }
 }
 

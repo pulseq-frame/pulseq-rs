@@ -39,6 +39,12 @@ pub enum InterpreterError {
         flag: String,
         value: i32,
     },
+    #[error(
+        "Fov transform's 3x3 part must be a uniformly-scaled rotation — \
+         orthogonal columns with equal, non-zero norms. Non-uniform scale, \
+         shear, and degenerate matrices aren't yet supported."
+    )]
+    NonUnitaryFov,
 }
 
 #[derive(Error, Debug)]

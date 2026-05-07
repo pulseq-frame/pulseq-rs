@@ -73,22 +73,14 @@ use num_complex::Complex64;
 use crate::error::{InterpreterError, InterpreterWarning};
 use crate::seq;
 
-/// Bare-minimum interpretation: copies the seq sequence into the int form,
-/// applying FOV scaling on gradient amplitudes, folding the relative
+/// Lowers a seq sequence into the int form, folding the relative
 /// (`rel × larmor`) and absolute components of RF/ADC frequency and phase,
-/// and resolving RF shims from either the `rf_shims` extension or the pTx
-/// shim shape on the seq RF.
-///
-/// Other extensions are ignored — triggers stay empty, `Once::Always`,
-/// `pmc = false`, `Labels::default()`. Soft delays are ignored too; block
-/// durations are taken verbatim from `seq`. Future steps fill these in.
-///
-/// `fov_scale` tells us by how much to increase / decrease FOV per axis (the
-/// caller already worked out `out_fov / seq_fov`); a value of 2 means we
-/// double FOV and halve the gradients.
+/// resolving RF shims from either the `rf_shims` extension or the pTx shim
+/// shape on the seq RF, and applying the per-axis scale of `fov` to gradient
+/// amplitudes.
 pub fn convert(
     seq: &seq::Sequence,
-    fov_scale: [f64; 3],
+    fov: super::Fov,
     larmor: f64,
     soft_delays: HashMap<String, f64>,
     warnings: &mut Vec<InterpreterWarning>,
@@ -104,6 +96,17 @@ pub fn convert(
             });
         }
     }
+
+    // Per-axis gradient scaling = column norms of the 3x3 part. Output FOV
+    // = scale * seq.fov (with seq.fov defaulting to [1, 1, 1] when unset).
+    // Rotation and translation parts of the matrix are not applied yet.
+    let fov_scale = fov.scale();
+    let seq_fov = seq.fov.map_or([1.0; 3], |(x, y, z)| [x, y, z]);
+    let out_fov = [
+        fov_scale[0] * seq_fov[0],
+        fov_scale[1] * seq_fov[1],
+        fov_scale[2] * seq_fov[2],
+    ];
 
     // Track the channel count established by the first explicit shim so we
     // can warn (not error) if later RFs disagree.
@@ -157,9 +160,7 @@ pub fn convert(
             .filter(|e| matches!(e, seq::Extension::Delay { .. }))
             .count();
         if delay_count > 1 {
-            warnings.push(InterpreterWarning::MultipleSoftDelays {
-                block_id: block.id,
-            });
+            warnings.push(InterpreterWarning::MultipleSoftDelays { block_id: block.id });
         }
         let mut duration = block.duration;
         for ext in &block.ext {
@@ -198,6 +199,12 @@ pub fn convert(
             }
         }
 
+        let amp_scale = if label_state.no_scl {
+            [1.0; 3]
+        } else {
+            fov_scale
+        };
+
         blocks.push(super::Block {
             id: block.id,
             duration,
@@ -205,15 +212,15 @@ pub fn convert(
             gx: block
                 .gx
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[0], seq.time_raster.grad, &mut shapes)),
+                .map(|g| convert_grad(g, amp_scale[0], seq.time_raster.grad, &mut shapes)),
             gy: block
                 .gy
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[1], seq.time_raster.grad, &mut shapes)),
+                .map(|g| convert_grad(g, amp_scale[1], seq.time_raster.grad, &mut shapes)),
             gz: block
                 .gz
                 .as_ref()
-                .map(|g| convert_grad(g, fov_scale[2], seq.time_raster.grad, &mut shapes)),
+                .map(|g| convert_grad(g, amp_scale[2], seq.time_raster.grad, &mut shapes)),
             adc: block
                 .adc
                 .as_ref()
@@ -242,6 +249,7 @@ pub fn convert(
 
     Ok(super::Sequence {
         name: seq.name.clone(),
+        fov: out_fov,
         blocks,
     })
 }
@@ -407,7 +415,7 @@ impl ShapeLib {
 struct LabelState {
     adc_labels: super::Labels,
     block_labels: super::BlockLabels,
-    
+
     /// Disable FOV rotations for the current block
     no_rot: bool,
     /// Disable FOV positioning for the current block
@@ -464,7 +472,7 @@ impl LabelState {
             F::NoPos => self.no_pos = on,
             F::NoScl => self.no_scl = on,
             // Counters / Once handled above by early-return.
-            F::Counter(_) | F::Once => unreachable!()
+            F::Counter(_) | F::Once => unreachable!(),
         }
         Ok(())
     }
