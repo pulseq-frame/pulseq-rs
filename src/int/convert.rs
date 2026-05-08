@@ -4,7 +4,7 @@ use std::sync::Arc;
 use num_complex::Complex64;
 
 use crate::error::{InterpreterError, InterpreterWarning};
-use crate::int::{Fov, Quaternion};
+use crate::int::{Transform, Quaternion};
 use crate::seq;
 
 /// Lowers a seq sequence into the int form, folding the relative
@@ -14,7 +14,7 @@ use crate::seq;
 /// amplitudes.
 pub fn convert(
     seq: &seq::Sequence,
-    fov: super::Fov,
+    fov: super::Transform,
     larmor: f64,
     soft_delays: HashMap<String, f64>,
     warnings: &mut Vec<InterpreterWarning>,
@@ -169,7 +169,6 @@ pub fn convert(
         );
 
         blocks.push(super::Block {
-            id: block.id,
             duration,
             rf,
             gx,
@@ -296,7 +295,7 @@ fn transform_grad(
     gx: Option<&seq::Gradient>,
     gy: Option<&seq::Gradient>,
     gz: Option<&seq::Gradient>,
-    transform: Fov,
+    transform: Transform,
     grad_raster: f64,
     shapes: &mut ShapeLib,
     grads: &mut GradLib,
