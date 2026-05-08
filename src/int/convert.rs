@@ -305,6 +305,23 @@ fn transform_grad(
         gz.map(|g| lookup_grad(g, grad_raster, shapes)),
     ];
 
+    // Identity rotation: each axis is independent, so we can sidestep the
+    // shared-shape/delay requirement that the rotated path needs. Just apply
+    // the inverse scale (`to_grad_transform` would do the same, but only
+    // along the diagonal).
+    if transform.rotation.is_identity() {
+        let inv_scale = 1.0 / transform.scale;
+        let emit = |opt: Option<(f64, f64, Arc<super::Shape<f64>>)>| {
+            opt.map(|(amp, delay, shape)| super::Gradient {
+                amp: amp * inv_scale,
+                delay,
+                shape,
+            })
+        };
+        let [lx, ly, lz] = lookups;
+        return (emit(lx), emit(ly), emit(lz));
+    }
+
     // Pick the first present axis as the reference. If nothing is present
     // there's no gradient — rotation has nothing to project from.
     let Some((_, ref_delay, ref_shape)) = lookups.iter().find_map(|opt| opt.as_ref()).cloned()
