@@ -6,7 +6,7 @@ use std::sync::Arc;
 mod convert;
 mod math;
 
-pub use math::{Transform, Quaternion};
+pub use math::{Quaternion, Transform};
 
 pub struct Sequence {
     pub name: Option<String>,
@@ -39,11 +39,11 @@ impl Sequence {
 pub struct Block {
     /// `[s]`
     pub duration: f64,
-    pub rf: Option<Arc<Rf>>,
-    pub gx: Option<Arc<Gradient>>,
-    pub gy: Option<Arc<Gradient>>,
-    pub gz: Option<Arc<Gradient>>,
-    pub adc: Option<Arc<Adc>>,
+    pub rf: Option<Rf>,
+    pub gx: Option<Gradient>,
+    pub gy: Option<Gradient>,
+    pub gz: Option<Gradient>,
+    pub adc: Option<Adc>,
     /// Triggers from the `triggers` extension active in this block.
     pub triggers: Vec<Trigger>,
     /// Label state from the `labelset` / `labelinc` extension.
@@ -188,7 +188,10 @@ impl<T> Shape<T> {
 
 impl<T> Shape<T>
 where
-    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
+    T: Copy
+        + std::ops::Add<Output = T>
+        + std::ops::Sub<Output = T>
+        + std::ops::Mul<f64, Output = T>,
 {
     /// Linear interpolation at `time` (in seconds). Returns `amp[0]` for
     /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`.

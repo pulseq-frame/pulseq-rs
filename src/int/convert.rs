@@ -4,7 +4,7 @@ use std::sync::Arc;
 use num_complex::Complex64;
 
 use crate::error::{InterpreterError, InterpreterWarning};
-use crate::int::{Transform, Quaternion};
+use crate::int::{Quaternion, Transform};
 use crate::seq;
 
 /// Lowers a seq sequence into the int form, folding the relative
@@ -48,16 +48,13 @@ pub fn convert(
     // Memoizes seq → int shape conversions so blocks that share an
     // `Arc<seq::Shape>` end up sharing a single `Arc<int::Shape>` too.
     let mut shapes = ShapeLib::default();
-    // Memoizes int::Gradient lookups across blocks, keyed by structural
-    // identity (amp, delay, shape ptr from ShapeLib).
-    let mut grads = GradLib::default();
     let mut blocks = Vec::with_capacity(seq.blocks.len());
 
     for block in &seq.blocks {
         let rf = block
             .rf
             .as_ref()
-            .map(|rf| -> Result<Arc<super::Rf>, InterpreterError> {
+            .map(|rf| -> Result<super::Rf, InterpreterError> {
                 let shims = resolve_shims(block.id, rf, &block.ext)?;
                 if shims.len() > 1 {
                     match expected_shim_channels {
@@ -165,7 +162,6 @@ pub fn convert(
             transform,
             seq.time_raster.grad,
             &mut shapes,
-            &mut grads,
         );
 
         blocks.push(super::Block {
@@ -251,8 +247,8 @@ fn convert_rf(
     rf_raster: f64,
     shims: Vec<Complex64>,
     shapes: &mut ShapeLib,
-) -> Arc<super::Rf> {
-    Arc::new(super::Rf {
+) -> super::Rf {
+    super::Rf {
         amp: rf.amp,
         phase: rf.phase.0 * larmor + rf.phase.1,
         delay: rf.delay,
@@ -261,7 +257,7 @@ fn convert_rf(
         shape: shapes.get_complex(&rf.shape, rf_raster),
         shims,
         rf_use: rf.rf_use,
-    })
+    }
 }
 
 /// Resolves a single seq gradient to its `(amp, delay, int_shape)` triple.
@@ -298,11 +294,10 @@ fn transform_grad(
     transform: Transform,
     grad_raster: f64,
     shapes: &mut ShapeLib,
-    grads: &mut GradLib,
 ) -> (
-    Option<Arc<super::Gradient>>,
-    Option<Arc<super::Gradient>>,
-    Option<Arc<super::Gradient>>,
+    Option<super::Gradient>,
+    Option<super::Gradient>,
+    Option<super::Gradient>,
 ) {
     let lookups: [Option<(f64, f64, Arc<super::Shape<f64>>)>; 3] = [
         gx.map(|g| lookup_grad(g, grad_raster, shapes)),
@@ -343,11 +338,15 @@ fn transform_grad(
         m[2][0] * amps[0] + m[2][1] * amps[1] + m[2][2] * amps[2],
     ];
 
-    let mut emit = |amp: f64| -> Option<Arc<super::Gradient>> {
+    let emit = |amp: f64| {
         if amp == 0.0 {
             None
         } else {
-            Some(grads.get(amp, ref_delay, ref_shape.clone()))
+            Some(super::Gradient {
+                amp,
+                delay: ref_delay,
+                shape: ref_shape.clone(),
+            })
         }
     };
     (emit(out[0]), emit(out[1]), emit(out[2]))
@@ -358,8 +357,8 @@ fn convert_adc(
     larmor: f64,
     labels: super::Labels,
     shapes: &mut ShapeLib,
-) -> Arc<super::Adc> {
-    Arc::new(super::Adc {
+) -> super::Adc {
+    super::Adc {
         num: adc.num,
         dwell: adc.dwell,
         delay: adc.delay,
@@ -369,7 +368,7 @@ fn convert_adc(
         // multiply the seq tick-domain time by `dwell` to get seconds.
         phase_shape: adc.phase_shape.as_ref().map(|s| shapes.get(s, adc.dwell)),
         labels,
-    })
+    }
 }
 
 // TODO: might be worth it to write a generic shape lib shared by raw->seq and
@@ -441,25 +440,6 @@ impl ShapeLib {
                     duration: rise + flat + fall,
                 })
             })
-            .clone()
-    }
-}
-
-/// Memoizes int::Gradient lookups so that two blocks producing the same
-/// `(amp, delay, shape)` triple share an `Arc<int::Gradient>`. Cache key is
-/// `(amp_bits, shape_ptr, delay_bits)`; the shape pointer comes from
-/// `ShapeLib` so equal seq inputs already collapse to the same int shape.
-#[derive(Default)]
-struct GradLib {
-    cache: HashMap<(u64, usize, u64), Arc<super::Gradient>>,
-}
-
-impl GradLib {
-    fn get(&mut self, amp: f64, delay: f64, shape: Arc<super::Shape<f64>>) -> Arc<super::Gradient> {
-        let key = (amp.to_bits(), Arc::as_ptr(&shape) as usize, delay.to_bits());
-        self.cache
-            .entry(key)
-            .or_insert_with(|| Arc::new(super::Gradient { amp, delay, shape }))
             .clone()
     }
 }
