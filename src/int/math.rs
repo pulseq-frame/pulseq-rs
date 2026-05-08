@@ -34,6 +34,10 @@ impl Quaternion {
         const EPS: f64 = 1e-9;
         (1.0 - self.norm()).abs() <= EPS
     }
+
+    pub fn is_identity(&self) -> bool {
+        self.0 == [1.0, 0.0, 0.0, 0.0]
+    }
 }
 
 #[derive(Clone, Copy)]

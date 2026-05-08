@@ -6,6 +6,7 @@ use std::fmt::Write;
 
 use maud::{DOCTYPE, Markup, PreEscaped, html};
 
+pub mod int;
 pub mod raw;
 pub mod structured;
 
