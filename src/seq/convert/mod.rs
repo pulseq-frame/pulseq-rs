@@ -79,6 +79,8 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
     })?;
 
     let mut gradients = map_section_data(&mut sections, |grad: raw::Gradient| {
+        // TODO: first / last must be computed if it is missing (pre 1.5) and inserted into the shape
+
         Ok((
             grad.id,
             Arc::new(seq::Gradient::Free {

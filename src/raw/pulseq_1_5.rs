@@ -93,8 +93,8 @@ pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
     let grad = seq! {Gradient {
         id: int,
         amp: cut_err(float),
-        first: cut_err(float),
-        last: cut_err(float),
+        first: cut_err(float.map(Some)),
+        last: cut_err(float.map(Some)),
         shape_id: cut_err(int),
         time_id: cut_err(signed_int),
         delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
