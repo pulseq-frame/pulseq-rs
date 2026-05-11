@@ -13,7 +13,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
     let mut definitions: Vec<(String, [Markup; 2])> = Vec::new();
     let mut blocks: Vec<(String, [Markup; 8])> = Vec::new();
     let mut rfs: Vec<(String, [Markup; 13])> = Vec::new();
-    let mut gradients: Vec<(String, [Markup; 5])> = Vec::new();
+    let mut gradients: Vec<(String, [Markup; 7])> = Vec::new();
     let mut traps: Vec<(String, [Markup; 6])> = Vec::new();
     let mut adcs: Vec<(String, [Markup; 9])> = Vec::new();
     let mut delays: Vec<(String, [Markup; 2])> = Vec::new();
@@ -82,6 +82,8 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
                         [
                             text(g.id.to_string()),
                             text(g.amp.to_string()),
+                            text(g.first.map_or("-".to_owned(), |x| x.to_string())),
+                            text(g.last.map_or("-".to_owned(), |x| x.to_string())),
                             id_ref("shape", g.shape_id),
                             id_ref_signed("shape", g.time_id),
                             text(format!("{:.6}", g.delay)),
@@ -202,7 +204,7 @@ pub fn render(input: &Path, sections: &[Section]) -> String {
             ))
         }
         section id="gradients" { h2 { "Arbitrary gradients" }
-            (table("grad", ["id", "amp [Hz/m]", "shape", "time", "delay [s]"], &gradients))
+            (table("grad", ["id", "amp [Hz/m]", "first [Hz/m]", "last [Hz/m]", "shape", "time", "delay [s]"], &gradients))
         }
         section id="traps" { h2 { "Trapezoidal gradients" }
             (table(
