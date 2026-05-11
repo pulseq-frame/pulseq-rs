@@ -171,6 +171,10 @@ pub struct Gradient {
     pub id: u32,
     /// `Hz/m`
     pub amp: f64,
+    /// `Hz/m` - amplitude at the start of the gradient
+    pub first: f64,
+    /// `Hz/m` - amplitude at the end of the gradient
+    pub last: f64,
     pub shape_id: u32,
     /// Sentinel values: `0` = uniform centers `[0.5, 1.5, …, N-0.5]`,
     /// `-1` (pulseq 1.5+) = half-tick grid `[0.5, 1.0, 1.5, …, N-0.5]` with

@@ -5,7 +5,7 @@ use winnow::token::one_of;
 
 use super::pulseq_1_2::{definitions, shapes, traps, version};
 use super::pulseq_1_3::{extension_refs, extension_specs};
-use super::pulseq_1_4::{blocks, gradients, signature};
+use super::pulseq_1_4::{blocks, signature};
 use super::{helpers::*, *};
 
 pub fn file(input: &mut &str) -> ModalResult<Vec<Section>> {
@@ -86,5 +86,23 @@ pub fn adcs(input: &mut &str) -> ModalResult<Vec<Adc>> {
 
     preceded(tag_nl("[ADC]"), repeat(0.., adc))
         .context(StrContext::Label("[ADC] section"))
+        .parse_next(input)
+}
+
+pub fn gradients(input: &mut &str) -> ModalResult<Vec<Gradient>> {
+    let grad = seq! {Gradient {
+        id: int,
+        amp: cut_err(float),
+        first: cut_err(float),
+        last: cut_err(float),
+        shape_id: cut_err(int),
+        time_id: cut_err(signed_int),
+        delay: cut_err(int).map(|d: u32| d as f64 * 1e-6),
+        _: cut_err(nl),
+    }}
+    .context(StrContext::Label("gradient record"));
+
+    preceded(tag_nl("[GRADIENTS]"), repeat(0.., grad))
+        .context(StrContext::Label("[GRADIENTS] section"))
         .parse_next(input)
 }
