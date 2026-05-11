@@ -88,6 +88,48 @@ impl ShapeLib {
         Ok(shape)
     }
 
+    /// Like [`get`], but for a Free gradient where the boundary samples at
+    /// `t = 0` and `t = shape_dur` must be explicit in the shape.
+    ///
+    /// `first` and `last` are in the same normalized units as the raw shape
+    /// samples (i.e. divide the gradient's absolute Hz/m by `Gradient.amp`
+    /// before calling).
+    ///
+    /// For `time_id != 0` the existing samples already sit at the boundaries,
+    /// so this delegates to [`get`]. For `time_id == 0` (uniform centers
+    /// `[0.5, 1.5, …, M-0.5]`) the result has `M + 2` samples on a non-uniform
+    /// grid `[0.0, 0.5, 1.5, …, M-0.5, M]` with `first` and `last` bracketing
+    /// the original samples. Not memoized — pre-1.5 conversion calls this
+    /// at most once per gradient id.
+    pub fn get_with_boundaries(
+        &mut self,
+        shape_id: u32,
+        time_id: i32,
+        first: f64,
+        last: f64,
+    ) -> Result<Arc<crate::seq::Shape<f64>>, ConversionError> {
+        if time_id != 0 {
+            return self.get(shape_id, time_id);
+        }
+        let raw = self
+            .raw
+            .get(&shape_id)
+            .ok_or(ConversionError::ShapeNotFound(shape_id))?
+            .clone();
+        let m = raw.len();
+        let mut time = Vec::with_capacity(m + 2);
+        let mut amp = Vec::with_capacity(m + 2);
+        time.push(0.0);
+        amp.push(first);
+        for (i, &s) in raw.iter().enumerate() {
+            time.push(i as f64 + 0.5);
+            amp.push(s);
+        }
+        time.push(m as f64);
+        amp.push(last);
+        Ok(Arc::new(crate::seq::Shape::new(time, amp, m as u32)?))
+    }
+
     pub fn get_complex(
         &mut self,
         mag_id: u32,

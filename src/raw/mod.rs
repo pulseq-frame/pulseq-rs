@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::error;
 
-mod helpers;
+pub mod helpers;
 mod pulseq_1_2;
 mod pulseq_1_3;
 mod pulseq_1_4;
