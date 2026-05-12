@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.cargo.features": [
+        "viewer"
+    ],
+    "rust-analyzer.check.command": "clippy"
+}

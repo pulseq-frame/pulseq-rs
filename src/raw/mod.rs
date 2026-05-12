@@ -2,10 +2,11 @@ use std::fmt::Display;
 
 use crate::error;
 
-mod helpers;
+pub mod helpers;
 mod pulseq_1_2;
 mod pulseq_1_3;
 mod pulseq_1_4;
+mod pulseq_1_5;
 
 // Pulseq is parsed into the following structs, which are modelled after the
 // newest supported pulseq version. Older versions need to convert the data.
@@ -24,19 +25,28 @@ mod pulseq_1_4;
 //         https://gitlab.cs.fau.de/mrzero/pypulseq_rfshim
 
 pub fn parse_file(source: &str) -> Result<Vec<Section>, error::ParseError> {
-    let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
-        .parse_all(source)?;
+    // parse file twice, first time to only see version, second time below for full parse
+    use winnow::combinator::{opt, preceded};
+    use winnow::prelude::*;
+    let mut tmp = source;
+    let version = preceded(opt(helpers::nl), pulseq_1_2::version).parse_next(&mut tmp)?;
+
+    // let version = (helpers::nl().opt() + pulseq_1_2::version() + ezpc::none_of("").repeat(0..))
+    //     .parse_all(source)?;
 
     match version {
         Version {
             major: 1, minor: 2, ..
-        } => Ok(pulseq_1_2::file().parse_all(source)?),
+        } => Ok(pulseq_1_2::file.parse(source)?),
         Version {
             major: 1, minor: 3, ..
-        } => Ok(pulseq_1_3::file().parse_all(source)?),
+        } => Ok(pulseq_1_3::file.parse(source)?),
         Version {
             major: 1, minor: 4, ..
-        } => Ok(pulseq_1_4::file().parse_all(source)?),
+        } => Ok(pulseq_1_4::file.parse(source)?),
+        Version {
+            major: 1, minor: 5, ..
+        } => Ok(pulseq_1_5::file.parse(source)?),
         _ => Err(error::ParseError::UnsupportedVersion(version)),
     }
 }
@@ -52,7 +62,8 @@ pub enum Section {
     Traps(Vec<Trap>),
     Adcs(Vec<Adc>),
     Delays(Vec<Delay>),
-    Extensions(Extensions),
+    ExtensionRefs(Vec<ExtensionRef>),
+    ExtensionSpecs(Vec<ExtensionSpec>),
     Shapes(Vec<Shape>),
 }
 
@@ -108,15 +119,51 @@ pub struct Rf {
     pub amp: f64,
     pub mag_id: u32,
     pub phase_id: u32,
-    pub time_id: u32,
+    /// Sentinel values: `0` = uniform centers `[0.5, 1.5, …, N-0.5]`,
+    /// `-1` (pulseq 1.5+) = half-tick grid `[0.5, 1.0, 1.5, …, N-0.5]` with
+    /// `M = 2N-1` samples, positive = id of a custom time shape.
+    pub time_id: i32,
+    /// `s` (from pulseq: `us`)
+    pub center: Option<f64>,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
-    /// `Hz`
-    pub freq: f64,
-    /// `rad`
-    pub phase: f64,
+    /// relative to system frequency
+    pub freq_rel: f64,
+    /// offset to system frequency
+    pub phase_rel: f64,
+    /// `Hz` (offset to system frequency)
+    pub freq_off: f64,
+    /// `rad` (offset to system frequency)
+    pub phase_off: f64,
     /// shim_mag_ID, shim_phase_ID
     pub shim_id: Option<(u32, u32)>,
+    /// use - parsed from initial char of use identifier
+    pub rf_use: RfUse,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum RfUse {
+    Excitation,
+    Refocusing,
+    Inversion,
+    Saturation,
+    Preparation,
+    Other,
+    Undefined,
+}
+
+impl Display for RfUse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            RfUse::Excitation => "Excitation",
+            RfUse::Refocusing => "Refocusing",
+            RfUse::Inversion => "Inversion",
+            RfUse::Saturation => "Saturation",
+            RfUse::Preparation => "Preparation",
+            RfUse::Other => "Other",
+            RfUse::Undefined => "Undefined",
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -124,8 +171,15 @@ pub struct Gradient {
     pub id: u32,
     /// `Hz/m`
     pub amp: f64,
+    /// `Hz/m` - amplitude at the start of the gradient
+    pub first: Option<f64>,
+    /// `Hz/m` - amplitude at the end of the gradient
+    pub last: Option<f64>,
     pub shape_id: u32,
-    pub time_id: u32,
+    /// Sentinel values: `0` = uniform centers `[0.5, 1.5, …, N-0.5]`,
+    /// `-1` (pulseq 1.5+) = half-tick grid `[0.5, 1.0, 1.5, …, N-0.5]` with
+    /// `M = 2N-1` samples, positive = id of a custom time shape.
+    pub time_id: i32,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
 }
@@ -153,10 +207,16 @@ pub struct Adc {
     pub dwell: f64,
     /// `s` (from pulseq: `us`)
     pub delay: f64,
-    /// `Hz`
-    pub freq: f64,
-    /// `rad`
-    pub phase: f64,
+    /// relative to system frequency
+    pub freq_rel: f64,
+    /// relative to system frequency
+    pub phase_rel: f64,
+    /// `Hz` (offset to system frequency)
+    pub freq_off: f64,
+    /// `rad` (offset to system frequency)
+    pub phase_off: f64,
+    /// optional per-sample adc phase - WIP: no examples found
+    pub phase_shape_id: u32,
 }
 
 #[derive(Debug)]
@@ -166,13 +226,7 @@ pub struct Delay {
     pub delay: f64,
 }
 
-#[derive(Debug)]
-pub struct Extensions {
-    pub refs: Vec<ExtensionRef>,
-    pub specs: Vec<ExtensionSpec>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct ExtensionRef {
     pub id: u32,
     pub spec_id: u32,

@@ -1,0 +1,4 @@
+# With this you can run the viewer directly, e.g.: "cargo viewer assets/flash_je.seq"
+
+[alias]
+viewer = "run --features viewer --bin pulseq-rs --"

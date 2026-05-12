@@ -1,0 +1,293 @@
+/* Shared styles for both viewers. The bare-element rules from the raw viewer
+   (table, th, td, tr[id]) are scoped to .viewer-raw because the structured
+   viewer's tables (table.kv, table.sequence) define their own padding/borders. */
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 2em auto;
+  max-width: 800px;
+  padding: 0 1em 4em;
+  color: #222;
+  background: #fff;
+}
+
+h1 {
+  font-size: 1.4em;
+  margin-bottom: 0.2em;
+}
+
+h2 {
+  margin-top: 2em;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 0.3em;
+  font-size: 1.15em;
+}
+
+h3 {
+  margin: 1em 0 0.4em;
+  font-size: 1em;
+  color: #444;
+}
+
+a {
+  color: #0366d6;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.meta {
+  color: #586069;
+  font-size: 0.9em;
+}
+
+.empty {
+  color: #888;
+  font-style: italic;
+}
+
+/* ---------- viewer_raw ---------- */
+
+.viewer-raw nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+  padding-left: max(1em, calc((100% - 800px) / 2 + 1em));
+  padding-right: max(1em, calc((100% - 800px) / 2 + 1em));
+  background: #f6f8fa;
+  border-top: 1px solid #e1e4e8;
+}
+
+.viewer-raw nav a {
+  margin-right: 1em;
+}
+
+.viewer-raw table {
+  border-collapse: collapse;
+  font-size: 0.88em;
+  width: 100%;
+}
+
+.viewer-raw tr[id] {
+  scroll-margin-top: 2em;
+}
+
+.viewer-raw th {
+  background: #f6f8fa;
+  font-weight: 600;
+}
+
+.viewer-raw th,
+.viewer-raw td {
+  padding: 3px 8px;
+  border: 1px solid #e1e4e8;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.viewer-raw th:first-child,
+.viewer-raw td:first-child {
+  width: 1%;
+}
+
+.viewer-raw table.definitions,
+.viewer-raw table[class^="ext-obj-"] {
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+.viewer-raw table.definitions th,
+.viewer-raw table.definitions td,
+.viewer-raw table[class^="ext-obj-"] th,
+.viewer-raw table[class^="ext-obj-"] td {
+  text-align: left;
+}
+
+.viewer-raw tr:target {
+  background: #fffbd6;
+}
+
+.viewer-raw .table-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid #e1e4e8;
+  border-radius: 4px;
+  margin: 0.3em 0 1em;
+}
+
+.viewer-raw .table-wrap table {
+  border: none;
+}
+
+.viewer-raw .table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  box-shadow: inset 0 -1px 0 #e1e4e8;
+}
+
+.viewer-raw .plot {
+  width: 100%;
+  height: 260px;
+  margin: 0.2em 0 1.5em;
+}
+
+.viewer-raw details > summary {
+  cursor: pointer;
+  color: #586069;
+  font-size: 0.85em;
+}
+
+/* ---------- viewer_structured ---------- */
+
+table.kv {
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+
+table.kv td {
+  padding: 0.15em 1.2em 0.15em 0;
+  vertical-align: top;
+}
+
+table.kv td:first-child {
+  font-weight: 600;
+}
+
+table.sequence {
+  border-collapse: collapse;
+  font-size: 0.9em;
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+}
+
+table.sequence td {
+  padding: 0.1em 1em 0.1em 0;
+  vertical-align: top;
+}
+
+table.sequence td:first-child {
+  color: #aaa;
+  text-align: right;
+  user-select: none;
+  padding-right: 1.5em;
+}
+
+table.sequence td:nth-child(2) {
+  text-align: right;
+  padding-right: 1.5em;
+}
+
+.ext-tag,
+.trap-tag,
+.adc-tag,
+.free-tag,
+.rf-tag {
+  position: relative;
+  cursor: pointer;
+}
+
+.rf-tag   { color: #3498db; }
+.adc-tag  { color: #e74c3c; }
+.trap-tag { color: #f1c40f; }
+.free-tag { color: #e67e22; }
+.ext-tag  { color: #2ecc71; }
+
+.ext-tag:hover,
+.trap-tag:hover,
+.adc-tag:hover,
+.free-tag:hover,
+.rf-tag:hover {
+  text-decoration: underline;
+}
+
+.trap-tag:hover .ext-popup,
+.adc-tag:hover .ext-popup,
+.free-tag:hover .ext-popup,
+.rf-tag:hover .ext-popup,
+.ext-tag:hover .ext-popup {
+  display: block;
+}
+
+.shape-link {
+  position: relative;
+  color: #0366d6;
+  cursor: pointer;
+}
+
+.shape-link:hover {
+  text-decoration: underline;
+}
+
+.shape-popup {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 200;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  padding: 0.4em;
+}
+
+.shape-link:hover .shape-popup {
+  display: block;
+}
+
+.shape-plot {
+  width: 480px;
+  height: 240px;
+}
+
+.ext-popup {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  padding: 0.5em 0.8em;
+  min-width: 180px;
+  max-width: 460px;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.85em;
+  color: #222;
+}
+
+.ext-popup ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ext-popup li {
+  padding: 0.15em 0;
+}
+
+.ext-popup li strong {
+  margin-right: 0.4em;
+}
+
+.ext-popup li .ext-unsupported {
+  color: #888;
+  margin-right: 0.4em;
+}
+
+.ext-popup li code {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 1em;
+}

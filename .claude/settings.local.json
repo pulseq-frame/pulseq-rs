@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.rs)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy *)"
+    ]
+  }
+}

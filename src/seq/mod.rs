@@ -1,13 +1,22 @@
 // This module describes a pulseq sequence, boiled down to the necessary info.
-use std::{collections::HashMap, path::Path, sync::Arc};
-
-use crate::{
-    error::{self, EventType, ValidationError},
-    parse_file::{self, Section},
+use std::{
+    collections::HashMap,
+    ops::{Add, Mul, Sub},
+    path::Path,
+    sync::Arc,
 };
 
-mod display;
-pub mod from_raw;
+use num_complex::Complex64;
+
+use crate::{
+    error::{self, ConversionError, EventType, ValidationError},
+    raw::{self, Section},
+};
+
+mod convert;
+
+pub mod extensions;
+pub use extensions::Extension;
 
 pub struct Sequence {
     pub time_raster: TimeRaster,
@@ -15,17 +24,19 @@ pub struct Sequence {
     pub fov: Option<(f64, f64, f64)>,
     pub definitions: HashMap<String, String>,
     pub blocks: Vec<Block>,
+    /// Soft-delay `id → hint` table, collected from the `delays` extension
+    pub soft_delay_hints: HashMap<u32, String>,
 }
 
 impl Sequence {
     pub fn from_parsed_file(sections: Vec<Section>) -> Result<Self, error::Error> {
-        let tmp = from_raw::from_raw(sections)?;
+        let tmp = convert::from_raw(sections)?;
         tmp.validate()?;
         Ok(tmp)
     }
 
     pub fn from_source(source: &str) -> Result<Self, error::Error> {
-        Self::from_parsed_file(parse_file::parse_file(source)?)
+        Self::from_parsed_file(raw::parse_file(source)?)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, error::Error> {
@@ -75,11 +86,10 @@ impl Sequence {
             check(block.adc.as_ref().map(|adc| adc.duration()), EventType::Adc)?;
         }
 
-        // Check things like identical shape size and no negative times
+        // Check things like no negative times
         for block in &self.blocks {
             let id = block.id;
             use EventType::*;
-            block.rf.as_ref().map_or(Ok(()), |x| x.validate(id))?;
             block.gx.as_ref().map_or(Ok(()), |x| x.validate(Gx, id))?;
             block.gy.as_ref().map_or(Ok(()), |x| x.validate(Gy, id))?;
             block.gz.as_ref().map_or(Ok(()), |x| x.validate(Gz, id))?;
@@ -123,23 +133,123 @@ pub struct Block {
     pub gy: Option<Arc<Gradient>>,
     pub gz: Option<Arc<Gradient>>,
     pub adc: Option<Arc<Adc>>,
+    pub ext: Vec<Extension>,
 }
 
 pub struct Rf {
     /// Unit: `[Hz]`
     pub amp: f64,
-    /// Unit: `[rad]`
-    pub phase: f64,
+    /// (rel_to_larmor, offset) - Unit: (`[rad/Hz]`, `[rad]`)
+    pub phase: (f64, f64),
     /// Unit: `[s]`
     pub delay: f64,
-    /// Unit: `[Hz]`
-    pub freq: f64,
-    // Shapes
-    pub amp_shape: Arc<Shape>,
-    pub phase_shape: Arc<Shape>,
-    // pTx extension
-    pub shim_shape: Option<(Arc<Shape>, Arc<Shape>)>,
+    /// Unit: `[s]`
+    pub center: f64,
+    /// (rel_to_larmor, offset) - Unit: (`[Hz/Hz]`, `[Hz]`)
+    pub freq: (f64, f64),
+    /// Combined amplitude × exp(i × phase) shape
+    pub shape: Arc<Shape<Complex64>>,
+    /// pTx extension: per-channel amplitude × exp(i × phase)
+    pub shim_shape: Option<Arc<Shape<Complex64>>>,
+    pub rf_use: RfUse,
 }
+
+/// Sparse sample representation: each pair `(time[i], amp[i])` is a breakpoint
+/// at the sample's *center* in raster ticks; values between breakpoints are
+/// linearly interpolated (see `interpolate`). The shape's total active extent
+/// is `duration` ticks, which can be larger than `*time.last()` (e.g. when
+/// samples sit at centers `[0.5, …, N-0.5]` the duration is `N`, not `N-0.5`).
+///
+/// SPEC NOTE: pulseq has three time-shape modes, all decoded into this same
+/// representation by `ShapeLib::get`:
+/// - `time_id = 0`: uniform centers `time = [0.5, 1.5, …, N-0.5]`, duration `N`.
+/// - `time_id = -1` (pulseq 1.5+): half-tick grid `time = [0.5, 1.0, 1.5, …,
+///   N-0.5]` with `M = 2N-1` samples (M must be odd), duration `N = (M+1)/2`.
+/// - `time_id = x > 0`: explicit sample times from shape `x`, duration =
+///   `*time.last()` (typically `0` for the first entry and `N` for the last,
+///   per the pulseq Free-gradient convention — we don't enforce this).
+///
+/// Invariants (enforced by `Shape::new`):
+/// - `time.len() == amp.len()`
+/// - `time` is non-empty and strictly increasing
+/// - all `time[i] >= 0.0` and `time[i] <= duration as f64`
+pub struct Shape<T> {
+    /// Sample positions in raster ticks (may be fractional for `time_id = -1`).
+    pub time: Vec<f64>,
+    /// Sample values aligned with `time` 1:1.
+    pub amp: Vec<T>,
+    /// Total active extent in raster ticks. Not necessarily `*time.last()`.
+    pub duration: u32,
+}
+
+impl<T> Shape<T> {
+    /// Validate invariants. `duration` is supplied by the caller because for
+    /// the centered conventions (`time_id ∈ {0, -1}`) it doesn't equal
+    /// `*time.last()`; the conversion layer is responsible for picking it.
+    pub fn new(time: Vec<f64>, amp: Vec<T>, duration: u32) -> Result<Self, ConversionError> {
+        if time.len() != amp.len() {
+            return Err(ConversionError::TimeShapeMismatch {
+                shape_len: amp.len(),
+                time_len: time.len(),
+            });
+        }
+        if time.is_empty() {
+            return Err(ConversionError::EmptyShape);
+        }
+        if !time.array_windows().all(|[w1, w2]| w1 < w2) {
+            return Err(ConversionError::TimeShapeNonIncreasing);
+        }
+        let dur_f = duration as f64;
+        if time.iter().any(|&t| t < 0.0 || t > dur_f) {
+            return Err(ConversionError::TimeShapeNegative);
+        }
+        Ok(Self {
+            time,
+            amp,
+            duration,
+        })
+    }
+}
+
+impl<T> Shape<T>
+where
+    T: Copy + Add<Output = T> + Sub<Output = T> + Mul<f64, Output = T>,
+{
+    /// Linear interpolation at `time` (in raster ticks). Returns `amp[0]` for
+    /// `time <= time[0]` and `*amp.last()` for `time >= time.last()`. Lifted
+    /// from the previous `expand_shape` so callers (simulators or scanner
+    /// raster expansion) can sample at any point without re-implementing it.
+    #[allow(clippy::indexing_slicing)]
+    pub fn interpolate(&self, time: f64) -> T {
+        if time <= self.time[0] {
+            return self.amp[0];
+        }
+        let last = self.time.len() - 1;
+        if time >= self.time[last] {
+            return self.amp[last];
+        }
+        let idx = self.time.iter().position(|&t| t >= time).unwrap_or(last);
+        let t0 = self.time[idx - 1];
+        let t1 = self.time[idx];
+        let frac = (time - t0) / (t1 - t0);
+        self.amp[idx - 1] + (self.amp[idx] - self.amp[idx - 1]) * frac
+    }
+}
+
+impl Shape<Complex64> {
+    /// Used to compute rf centers in pre 1.5 sequences.
+    /// This is a very rough approximation - it assumes the center is the point with the highest amplitude.
+    /// Returns the index into the shape that is closest to the center of the pulse (need to multiply with rf raster).
+    pub fn calc_center(&self) -> usize {
+        self.amp
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.norm().total_cmp(&b.1.norm()))
+            .map_or(0, |(i, _)| i)
+    }
+}
+
+pub use crate::raw::RfUse;
 
 pub enum Gradient {
     Free {
@@ -148,7 +258,7 @@ pub enum Gradient {
         /// Unit: `[s]`
         delay: f64,
         // Shapes
-        shape: Arc<Shape>,
+        shape: Arc<Shape<f64>>,
     },
     Trap {
         /// Unit: `[Hz/m]`
@@ -170,38 +280,26 @@ pub struct Adc {
     pub dwell: f64,
     /// Unit: `[s]`
     pub delay: f64,
-    /// Unit: `[Hz]`
-    pub freq: f64,
-    /// Unit: `[rad]`
-    pub phase: f64,
+    /// (rel_to_larmor, offset) - Unit: (`[Hz/Hz]`, `[Hz]`)
+    pub freq: (f64, f64),
+    /// (rel_to_larmor, offset) - Unit: (`[rad/Hz]`, `[rad]`)
+    pub phase: (f64, f64),
+    /// No examples given - assuming `[rad]` shape?
+    pub phase_shape: Option<Arc<Shape<f64>>>,
 }
-
-pub struct Shape(pub Vec<f64>);
 
 // Helper functions and other impls
 
 impl Rf {
     pub fn duration(&self, rf_raster: f64) -> f64 {
-        self.delay + self.amp_shape.0.len() as f64 * rf_raster
-    }
-
-    fn validate(&self, block_id: u32) -> Result<(), error::ValidationError> {
-        if self.phase_shape.0.len() != self.amp_shape.0.len() {
-            Err(ValidationError::ShapeMismatch {
-                ty: EventType::Rf,
-                block_id,
-                length_1: self.phase_shape.0.len(),
-                length_2: self.amp_shape.0.len(),
-            })?;
-        }
-        Ok(())
+        self.delay + self.shape.duration as f64 * rf_raster
     }
 }
 
 impl Gradient {
     pub fn duration(&self, grad_raster: f64) -> f64 {
         match self {
-            Gradient::Free { shape, delay, .. } => delay + shape.0.len() as f64 * grad_raster,
+            Gradient::Free { shape, delay, .. } => delay + shape.duration as f64 * grad_raster,
             Gradient::Trap {
                 rise,
                 flat,

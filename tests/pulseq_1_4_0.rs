@@ -1,4 +1,11 @@
-use pulseq_rs::Sequence;
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
+use pulseq_rs::seq::Sequence;
 
 #[test]
 /// A 1.4 + pTx extension file that uses shape ID 0 for the shim (default shim)
@@ -48,4 +55,8 @@ fn tse() {
 #[test]
 fn ute() {
     Sequence::from_file("../test-seqs/pypulseq/1.4.0/ute.seq").unwrap();
+}
+#[test]
+fn flash_je() {
+    Sequence::from_file("assets/flash_je.seq").unwrap();
 }
