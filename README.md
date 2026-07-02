@@ -98,6 +98,10 @@ Useful CLI args:
 
 ## Changelog
 
+### 0.2.1
+
+Removed the time shape checks
+
 ### 0.2.0
 
 Sorted by user-facing impact, biggest first.

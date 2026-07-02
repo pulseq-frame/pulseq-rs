@@ -56,29 +56,22 @@ impl ShapeLib {
                 let duration = m.div_ceil(2) as u32;
                 (time, duration)
             }
-            // Custom time shape - look it up and validate.
+            // Custom time shape - look it up.
             x if x > 0 => {
                 let time_shape_id = x as u32;
-                let raw_time = self
+                let time = self
                     .raw
                     .get(&time_shape_id)
                     .ok_or(ConversionError::ShapeNotFound(time_shape_id))?;
 
-                if raw_time.len() != m {
+                if time.len() != m {
                     return Err(ConversionError::TimeShapeMismatch {
                         shape_len: m,
-                        time_len: raw_time.len(),
+                        time_len: time.len(),
                     });
                 }
-                if raw_time.iter().any(|x| x.fract() != 0.0) {
-                    return Err(ConversionError::TimeShapeNonInteger);
-                }
-                if raw_time.iter().any(|x| *x < 0.0) {
-                    return Err(ConversionError::TimeShapeNegative);
-                }
-                let time: Vec<f64> = raw_time.iter().copied().collect();
-                let duration = *raw_time.last().ok_or(ConversionError::EmptyShape)? as u32;
-                (time, duration)
+                let duration = *time.last().ok_or(ConversionError::EmptyShape)? as u32;
+                (time.as_ref().clone(), duration)
             }
             other => return Err(ConversionError::UnknownTimeId(other)),
         };

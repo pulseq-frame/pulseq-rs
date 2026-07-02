@@ -288,10 +288,8 @@ pub enum ConversionError {
     UnknownTimeId(i32),
     #[error("Used a shape of length {shape_len} together with a time shape of length {time_len}")]
     TimeShapeMismatch { shape_len: usize, time_len: usize },
-    #[error("Used a shape as time shape which contained negative values.")]
-    TimeShapeNegative,
-    #[error("Used a shape as time shape which contained non-integer values.")]
-    TimeShapeNonInteger,
+    #[error("Time shape sample {index} ({t}) is out of range (0.0 to {duration})")]
+    TimeShapeRange { index: usize, t: f64, duration: u32 },
     #[error("Used a shape as time shape which is not strictly increasing")]
     TimeShapeNonIncreasing,
     #[error("Unsupported extension: '{0}'")]

@@ -200,8 +200,14 @@ impl<T> Shape<T> {
             return Err(ConversionError::TimeShapeNonIncreasing);
         }
         let dur_f = duration as f64;
-        if time.iter().any(|&t| t < 0.0 || t > dur_f) {
-            return Err(ConversionError::TimeShapeNegative);
+        for (i, &t) in time.iter().enumerate() {
+            if t < 0.0 || t > dur_f {
+                return Err(ConversionError::TimeShapeRange {
+                    index: i,
+                    t,
+                    duration,
+                });
+            }
         }
         Ok(Self {
             time,
