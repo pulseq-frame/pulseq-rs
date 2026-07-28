@@ -27,9 +27,10 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
 
     // Build the raw shape map first so the gradient-boundary pass can read
     // raw samples; clone (cheap — Arc refcount bumps) for ShapeLib to own.
-    let raw_shapes: HashMap<u32, Arc<Vec<f64>>> = map_section_data(&mut sections, |shape: raw::Shape| {
-        Ok((shape.id, Arc::new(shape.samples)))
-    })?;
+    let raw_shapes: HashMap<u32, Arc<Vec<f64>>> =
+        map_section_data(&mut sections, |shape: raw::Shape| {
+            Ok((shape.id, Arc::new(shape.samples)))
+        })?;
     let mut shapes = ShapeLib::new(raw_shapes.clone())?;
 
     let delays = map_section_data(&mut sections, |delay: raw::Delay| {
@@ -109,7 +110,8 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
         &defs.time_raster,
     )?;
 
-    let mut gradients: HashMap<u32, Arc<seq::Gradient>> = HashMap::with_capacity(raw_gradients.len());
+    let mut gradients: HashMap<u32, Arc<seq::Gradient>> =
+        HashMap::with_capacity(raw_gradients.len());
     for grad in &raw_gradients {
         let (first_abs, last_abs) = grad_boundaries
             .get(&grad.id)
@@ -120,7 +122,8 @@ pub fn from_raw(mut sections: Vec<raw::Section>) -> Result<Sequence, ConversionE
         } else {
             (0.0, 0.0)
         };
-        let shape = shapes.get_with_boundaries(grad.shape_id, grad.time_id, first_norm, last_norm)?;
+        let shape =
+            shapes.get_with_boundaries(grad.shape_id, grad.time_id, first_norm, last_norm)?;
         gradients.insert(
             grad.id,
             Arc::new(seq::Gradient::Free {
@@ -399,10 +402,7 @@ fn raw_shape_duration_ticks(
             let time_raw = raw_shapes
                 .get(&(x as u32))
                 .ok_or(ConversionError::ShapeNotFound(x as u32))?;
-            time_raw
-                .last()
-                .copied()
-                .ok_or(ConversionError::EmptyShape)
+            time_raw.last().copied().ok_or(ConversionError::EmptyShape)
         }
         other => Err(ConversionError::UnknownTimeId(other)),
     }

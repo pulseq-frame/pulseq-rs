@@ -98,6 +98,10 @@ Useful CLI args:
 
 ## Changelog
 
+### 0.2.2
+
+Default all soft delays to 0 if not specified. Emit warnings if missing.
+
 ### 0.2.1
 
 Removed the time shape checks

@@ -31,11 +31,6 @@ pub enum InterpreterError {
     #[error("Block #{block_id}: encountered a shim with zero channels")]
     EmptyShim { block_id: u32 },
     #[error(
-        "Soft delay #{id} (hint {hint:?}) is referenced by the sequence but \
-         no value was provided in the `soft_delays` input"
-    )]
-    MissingSoftDelay { id: u32, hint: String },
-    #[error(
         "Block #{block_id}: LABELSET {flag} = {value}, but boolean flags only \
          accept 0 or 1"
     )]
@@ -74,6 +69,10 @@ pub enum InterpreterWarning {
     },
     #[error("Block #{block_id}: multiple soft-delay extensions on a single block")]
     MultipleSoftDelays { block_id: u32 },
+    #[error("Soft delay '{hint}' was not set, defaulting to 0.0")]
+    MissingSoftDelay { hint: String },
+    #[error("Sequence used soft delay #{id} without defining it - defaulting to 0.0")]
+    MissingSoftDelayHint { id: u32 },
 }
 
 #[derive(Error, Debug)]

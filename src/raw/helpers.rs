@@ -74,13 +74,13 @@ pub fn extrapolate_grad_boundaries(samples: &[f64], time_id: i32) -> (f64, f64) 
         [] => f64::NAN,
         [a] => *a,
         [a, b, ..] if time_id == 0 => 1.5 * a - 0.5 * b,
-        [a, ..] => *a
+        [a, ..] => *a,
     };
     let last = match samples {
         [] => f64::NAN,
         [a] => *a,
-        [.., b, a] if time_id == 0  => 1.5 * a - 0.5 * b,
-        [.., b] => *b
+        [.., b, a] if time_id == 0 => 1.5 * a - 0.5 * b,
+        [.., b] => *b,
     };
     (first, last)
 }
@@ -153,10 +153,7 @@ mod tests {
     #[test]
     fn single_sample_returns_that_sample() {
         for time_id in [0, -1, 7] {
-            assert_eq!(
-                extrapolate_grad_boundaries(&[0.42], time_id),
-                (0.42, 0.42)
-            );
+            assert_eq!(extrapolate_grad_boundaries(&[0.42], time_id), (0.42, 0.42));
         }
     }
 

@@ -19,18 +19,6 @@ pub fn convert(
     soft_delays: HashMap<String, f64>,
     warnings: &mut Vec<InterpreterWarning>,
 ) -> Result<super::Sequence, InterpreterError> {
-    // Every soft-delay referenced anywhere in the sequence must have a value
-    // in the input map. We check up front so the per-block loop can assume
-    // all lookups succeed.
-    for (id, hint) in &seq.soft_delay_hints {
-        if !soft_delays.contains_key(hint) {
-            return Err(InterpreterError::MissingSoftDelay {
-                id: *id,
-                hint: hint.clone(),
-            });
-        }
-    }
-
     // Update the (purely informative) sequence FOV to account for scaling:
     let out_fov = {
         let s = fov.scale;
@@ -99,9 +87,20 @@ pub fn convert(
                 t_factor,
             } = ext
             {
-                // Both lookups are guaranteed by the validation above.
-                #[allow(clippy::indexing_slicing)]
-                let x = soft_delays[&seq.soft_delay_hints[id]];
+                let x = match seq.soft_delay_hints.get(id) {
+                    Some(hint) => match soft_delays.get(hint) {
+                        Some(value) => *value,
+                        None => {
+                            warnings
+                                .push(InterpreterWarning::MissingSoftDelay { hint: hint.clone() });
+                            0.0
+                        }
+                    },
+                    None => {
+                        warnings.push(InterpreterWarning::MissingSoftDelayHint { id: *id });
+                        0.0
+                    }
+                };
                 let computed = t_factor * x + t_offset;
                 if computed >= block.duration {
                     duration = computed;
