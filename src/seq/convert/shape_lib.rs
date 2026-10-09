@@ -70,7 +70,7 @@ impl ShapeLib {
                         time_len: time.len(),
                     });
                 }
-                let duration = *time.last().ok_or(ConversionError::EmptyShape)? as u32;
+                let duration = time.last().ok_or(ConversionError::EmptyShape)?.ceil() as u32;
                 (time.as_ref().clone(), duration)
             }
             other => return Err(ConversionError::UnknownTimeId(other)),
