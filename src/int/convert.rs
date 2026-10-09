@@ -280,6 +280,8 @@ fn lookup_grad(
     }
 }
 
+type GradLookup = (f64, f64, Arc<super::Shape<f64>>);
+
 /// Applies the FOV transform (scale + rotation) across all three gradient
 /// axes at once. With identity rotation each output axis is independent and
 /// the result matches per-axis scaling. With a non-identity rotation every
@@ -298,7 +300,7 @@ fn transform_grad(
     Option<super::Gradient>,
     Option<super::Gradient>,
 ) {
-    let lookups: [Option<(f64, f64, Arc<super::Shape<f64>>)>; 3] = [
+    let lookups: [Option<GradLookup>; 3] = [
         gx.map(|g| lookup_grad(g, grad_raster, shapes)),
         gy.map(|g| lookup_grad(g, grad_raster, shapes)),
         gz.map(|g| lookup_grad(g, grad_raster, shapes)),
@@ -310,7 +312,7 @@ fn transform_grad(
     // along the diagonal).
     if transform.rotation.is_identity() {
         let inv_scale = 1.0 / transform.scale;
-        let emit = |opt: Option<(f64, f64, Arc<super::Shape<f64>>)>| {
+        let emit = |opt: Option<GradLookup>| {
             opt.map(|(amp, delay, shape)| super::Gradient {
                 amp: amp * inv_scale,
                 delay,

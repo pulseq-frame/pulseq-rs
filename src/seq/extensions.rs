@@ -88,10 +88,7 @@ fn parse_shims(data: &str) -> Result<Extension, ExtensionError> {
     }
 
     Ok(Extension::Shimming {
-        shim: shim_values
-            .chunks_exact(2)
-            .flat_map(<[f64; 2]>::try_from)
-            .collect(),
+        shim: shim_values.as_chunks::<2>().0.to_vec(),
     })
 }
 

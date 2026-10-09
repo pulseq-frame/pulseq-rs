@@ -221,10 +221,12 @@ where
     }
 }
 
+type ExtensionTables = (HashMap<u32, Vec<seq::Extension>>, HashMap<u32, String>);
+
 fn convert_exts(
     ext_refs: Vec<raw::ExtensionRef>,
     ext_specs: Vec<raw::ExtensionSpec>,
-) -> Result<(HashMap<u32, Vec<seq::Extension>>, HashMap<u32, String>), ConversionError> {
+) -> Result<ExtensionTables, ConversionError> {
     // Walk every (spec, obj) pair, parsing the extension and - for `delays`
     // specs - capturing the hint into a single sequence-level table. Hints
     // are not stored on `Extension::Delay` itself (see seq/extensions.rs).
@@ -424,6 +426,8 @@ fn raw_shape_duration_ticks(
 ///
 /// Pulseq 1.5+ gradients already carry `raw.first`/`raw.last`, so the unwrap
 /// branch is skipped in that case.
+// `ch` only ranges over the three gradient axes.
+#[allow(clippy::indexing_slicing)]
 fn compute_grad_boundaries(
     raw_blocks: &[raw::Block],
     raw_grad_map: &HashMap<u32, &raw::Gradient>,
