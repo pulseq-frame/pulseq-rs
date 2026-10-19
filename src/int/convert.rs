@@ -284,10 +284,12 @@ type GradLookup = (f64, f64, Arc<super::Shape<f64>>);
 
 /// Applies the FOV transform (scale + rotation) across all three gradient
 /// axes at once. With identity rotation each output axis is independent and
-/// the result matches per-axis scaling. With a non-identity rotation every
-/// present input must share the same `int::Shape` Arc (after `ShapeLib`
-/// lookup) and the same `delay`; otherwise we `unimplemented!()`. `None`
-/// axes can become `Some` if rotation projects onto them.
+/// the result matches per-axis scaling. With a non-identity rotation, inputs
+/// sharing the same `int::Shape` Arc (after `ShapeLib` lookup) and `delay`
+/// are mixed by amplitude only, keeping the shared shape. Otherwise all axes
+/// are resampled onto a common time grid and rotated per sample (see
+/// `rotate_resampled`). `None` axes can become `Some` if rotation projects
+/// onto them.
 fn transform_grad(
     gx: Option<&seq::Gradient>,
     gy: Option<&seq::Gradient>,
@@ -330,31 +332,25 @@ fn transform_grad(
         return (None, None, None);
     };
 
-    // Every other present axis must agree on shape and delay. Arc::ptr_eq
-    // catches Trap+Free mixes, mismatched trap timings, and different free
-    // shapes uniformly because ShapeLib gives the same Arc only for inputs
-    // that share both kind and parameters.
-    for opt in lookups.iter().flatten() {
-        let (_, delay, shape) = opt;
-        if *delay != ref_delay || !Arc::ptr_eq(shape, &ref_shape) {
-            unimplemented!(
-                "transform_grad: rotation across axes with different shapes \
-                     or delays is not supported yet"
-            );
-        }
+    let m = transform.to_grad_transform();
+
+    // If all present axes agree on shape and delay, rotation only mixes the
+    // amplitudes and the shared shape can be kept. Arc::ptr_eq catches
+    // Trap+Free mixes, mismatched trap timings, and different free shapes
+    // uniformly because ShapeLib gives the same Arc only for inputs that
+    // share both kind and parameters.
+    let shared = lookups
+        .iter()
+        .flatten()
+        .all(|(_, delay, shape)| *delay == ref_delay && Arc::ptr_eq(shape, &ref_shape));
+    if !shared {
+        return rotate_resampled(&lookups, m);
     }
 
-    let amps = [
-        lookups[0].as_ref().map_or(0.0, |(a, _, _)| *a),
-        lookups[1].as_ref().map_or(0.0, |(a, _, _)| *a),
-        lookups[2].as_ref().map_or(0.0, |(a, _, _)| *a),
-    ];
-    let m = transform.to_grad_transform();
-    let out = [
-        m[0][0] * amps[0] + m[0][1] * amps[1] + m[0][2] * amps[2],
-        m[1][0] * amps[0] + m[1][1] * amps[1] + m[1][2] * amps[2],
-        m[2][0] * amps[0] + m[2][1] * amps[1] + m[2][2] * amps[2],
-    ];
+    let amps = lookups
+        .each_ref()
+        .map(|opt| opt.as_ref().map_or(0.0, |(a, _, _)| *a));
+    let out = mat_vec(m, amps);
 
     let emit = |amp: f64| {
         if amp == 0.0 {
@@ -368,6 +364,105 @@ fn transform_grad(
         }
     };
     (emit(out[0]), emit(out[1]), emit(out[2]))
+}
+
+fn mat_vec(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
+    m.map(|row| row[0] * v[0] + row[1] * v[1] + row[2] * v[2])
+}
+
+/// Two grid points closer than this `[s]` are merged into one. Shape times
+/// and delays are raster multiples computed in floating point, so the same
+/// instant can arrive with slightly different bits from different axes.
+const GRID_EPS: f64 = 1e-12;
+
+/// Rotation path for axes that don't share shape and delay. Each present
+/// axis is a piecewise-linear waveform `amp * shape(t - delay)` on
+/// `[delay, delay + duration]` and zero outside. The union of all
+/// breakpoints (samples and support edges) is a grid on which every input
+/// is linear between neighbours, so rotating the samples on that grid and
+/// linearly interpolating the result is exact.
+///
+/// Each output axis gets its own freshly built shape normalized to a peak
+/// magnitude of 1, with the peak (signed) going into `amp`. The common
+/// `delay` is the earliest input delay. Output axes that are zero everywhere
+/// are dropped.
+fn rotate_resampled(
+    lookups: &[Option<GradLookup>; 3],
+    m: [[f64; 3]; 3],
+) -> (
+    Option<super::Gradient>,
+    Option<super::Gradient>,
+    Option<super::Gradient>,
+) {
+    let present = || lookups.iter().flatten();
+    let start = present()
+        .map(|(_, delay, _)| *delay)
+        .fold(f64::INFINITY, f64::min);
+    let end = present()
+        .map(|(_, delay, shape)| delay + shape.duration)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if !start.is_finite() {
+        return (None, None, None);
+    }
+
+    // Grid relative to `start`.
+    let mut grid: Vec<f64> = present()
+        .flat_map(|(_, delay, shape)| {
+            let offset = delay - start;
+            shape
+                .time
+                .iter()
+                .map(move |t| offset + t)
+                .chain([offset, offset + shape.duration])
+        })
+        .collect();
+    grid.sort_by(f64::total_cmp);
+    grid.dedup_by(|b, a| *b - *a <= GRID_EPS);
+
+    // Waveform of one input axis at grid time `t` (relative to `start`).
+    let sample = |opt: &Option<GradLookup>, t: f64| -> f64 {
+        let Some((amp, delay, shape)) = opt else {
+            return 0.0;
+        };
+        let local = t - (delay - start);
+        if local < -GRID_EPS || local > shape.duration + GRID_EPS {
+            0.0
+        } else {
+            amp * shape.interpolate(local)
+        }
+    };
+
+    let mut out: [Vec<f64>; 3] = Default::default();
+    for &t in &grid {
+        let rotated = mat_vec(m, lookups.each_ref().map(|opt| sample(opt, t)));
+        for (axis, value) in out.iter_mut().zip(rotated) {
+            axis.push(value);
+        }
+    }
+
+    // `end - start` and the grid's last point are computed differently and
+    // may disagree by an ulp; the shape invariant needs `time <= duration`.
+    let duration = grid.last().map_or(end - start, |&t| t.max(end - start));
+    let emit = |values: Vec<f64>| -> Option<super::Gradient> {
+        let peak = values
+            .iter()
+            .copied()
+            .max_by(|a, b| a.abs().total_cmp(&b.abs()))?;
+        if peak == 0.0 {
+            return None;
+        }
+        Some(super::Gradient {
+            amp: peak,
+            delay: start,
+            shape: Arc::new(super::Shape {
+                time: grid.clone(),
+                amp: values.into_iter().map(|v| v / peak).collect(),
+                duration,
+            }),
+        })
+    };
+    let [ox, oy, oz] = out;
+    (emit(ox), emit(oy), emit(oz))
 }
 
 fn convert_adc(
@@ -548,5 +643,85 @@ impl LabelState {
             C::Acq => &mut self.adc_labels.acq,
             C::Trid => &mut self.block_labels.trid,
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::indexing_slicing, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    fn trap(amp: f64, rise: f64, flat: f64, fall: f64, delay: f64) -> seq::Gradient {
+        seq::Gradient::Trap {
+            amp,
+            rise,
+            flat,
+            fall,
+            delay,
+        }
+    }
+
+    /// Evaluates an int gradient at absolute block time `t`.
+    fn eval(g: Option<&super::super::Gradient>, t: f64) -> f64 {
+        g.map_or(0.0, |g| {
+            let local = t - g.delay;
+            if local < 0.0 || local > g.shape.duration {
+                0.0
+            } else {
+                g.amp * g.shape.interpolate(local)
+            }
+        })
+    }
+
+    fn rot_z(angle: f64) -> Transform {
+        let h = angle / 2.0;
+        Transform {
+            rotation: Quaternion([h.cos(), 0.0, 0.0, h.sin()]),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rotation_with_different_shapes_and_delays() {
+        let gx = trap(1000.0, 1e-4, 5e-4, 1e-4, 0.0);
+        let gy = trap(-400.0, 2e-4, 1e-4, 3e-4, 2e-4);
+        let transform = rot_z(0.3);
+        let m = transform.to_grad_transform();
+        let mut shapes = ShapeLib::default();
+        let (ox, oy, oz) = transform_grad(Some(&gx), Some(&gy), None, transform, 1e-5, &mut shapes);
+        assert!(oz.is_none());
+
+        let ix = lookup_grad(&gx, 1e-5, &mut shapes);
+        let iy = lookup_grad(&gy, 1e-5, &mut shapes);
+        let input = |(amp, delay, shape): &GradLookup, t: f64| {
+            let local = t - delay;
+            if local < 0.0 || local > shape.duration {
+                0.0
+            } else {
+                amp * shape.interpolate(local)
+            }
+        };
+        for i in 0..=1000 {
+            let t = i as f64 * 1e-6;
+            let v = [input(&ix, t), input(&iy, t), 0.0];
+            let expected = mat_vec(m, v);
+            assert!(
+                (eval(ox.as_ref(), t) - expected[0]).abs() < 1e-9,
+                "x at {t}"
+            );
+            assert!(
+                (eval(oy.as_ref(), t) - expected[1]).abs() < 1e-9,
+                "y at {t}"
+            );
+        }
+    }
+
+    #[test]
+    fn rotation_with_shared_shape_keeps_it() {
+        let gx = trap(1000.0, 1e-4, 5e-4, 1e-4, 0.0);
+        let gy = trap(-400.0, 1e-4, 5e-4, 1e-4, 0.0);
+        let mut shapes = ShapeLib::default();
+        let (ox, oy, _) = transform_grad(Some(&gx), Some(&gy), None, rot_z(0.3), 1e-5, &mut shapes);
+        assert!(Arc::ptr_eq(&ox.unwrap().shape, &oy.unwrap().shape));
     }
 }
