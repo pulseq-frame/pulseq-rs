@@ -59,19 +59,21 @@ pub enum InterpreterWarning {
         got: usize,
     },
     #[error(
-        "Block #{block_id}: soft delay computed to {computed}s, which is \
-         shorter than the block's existing duration {block}s — ignored"
+        "Block #{block_id}: soft delay computed to a negative duration \
+         {computed}s - keeping the default block duration {block}s"
     )]
-    SoftDelayShortensBlock {
+    NegativeSoftDelay {
         block_id: u32,
         computed: f64,
         block: f64,
     },
     #[error("Block #{block_id}: multiple soft-delay extensions on a single block")]
     MultipleSoftDelays { block_id: u32 },
-    #[error("Soft delay '{hint}' was not set, defaulting to 0.0")]
+    #[error("Soft delay '{hint}' was not set, keeping the default block duration")]
     MissingSoftDelay { hint: String },
-    #[error("Sequence used soft delay #{id} without defining it - defaulting to 0.0")]
+    #[error(
+        "Sequence used soft delay #{id} without defining it - keeping the default block duration"
+    )]
     MissingSoftDelayHint { id: u32 },
 }
 

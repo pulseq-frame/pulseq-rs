@@ -69,8 +69,9 @@ pub fn convert(
 
         // Apply any `Delay` extensions on this block. Each one computes a
         // candidate duration `t_factor * x + t_offset` where `x` is the
-        // user-supplied value for that hint. Updates only when the candidate
-        // is at least the current duration; otherwise warns and skips.
+        // user-supplied value for that hint. The candidate may shorten or
+        // lengthen the block; negative candidates are rejected with a warning
+        // and the block keeps its default duration.
         let delay_count = block
             .ext
             .iter()
@@ -87,25 +88,28 @@ pub fn convert(
                 t_factor,
             } = ext
             {
+                // Without a user-supplied value the block keeps the duration
+                // stored in the file, which the exporter (pypulseq / MATLAB
+                // `makeSoftDelay`) sets to the soft delay's default duration.
                 let x = match seq.soft_delay_hints.get(id) {
                     Some(hint) => match soft_delays.get(hint) {
                         Some(value) => *value,
                         None => {
                             warnings
                                 .push(InterpreterWarning::MissingSoftDelay { hint: hint.clone() });
-                            0.0
+                            continue;
                         }
                     },
                     None => {
                         warnings.push(InterpreterWarning::MissingSoftDelayHint { id: *id });
-                        0.0
+                        continue;
                     }
                 };
                 let computed = t_factor * x + t_offset;
-                if computed >= block.duration {
+                if computed >= 0.0 {
                     duration = computed;
                 } else {
-                    warnings.push(InterpreterWarning::SoftDelayShortensBlock {
+                    warnings.push(InterpreterWarning::NegativeSoftDelay {
                         block_id: block.id,
                         computed,
                         block: block.duration,

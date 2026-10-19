@@ -44,7 +44,7 @@ struct Cli {
     larmor: f64,
 
     /// Soft-delay value, repeatable as `hint=value` (value in seconds).
-    /// Required for any soft-delay hint referenced by the sequence.
+    /// Hints without a value keep the default block duration from the file.
     #[arg(long = "soft-delay", value_name = "HINT=SECONDS")]
     soft_delay: Vec<String>,
 
