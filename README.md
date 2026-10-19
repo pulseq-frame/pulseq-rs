@@ -98,6 +98,11 @@ Useful CLI args:
 
 ## Changelog
 
+### 0.3.0
+
+- Support rotation extension for all gradient combinations
+- Use block duration for soft-delay blocks when no duration is given
+
 ### 0.2.2
 
 Default all soft delays to 0 if not specified. Emit warnings if missing.
