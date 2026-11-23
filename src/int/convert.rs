@@ -230,7 +230,7 @@ fn resolve_shims(
             }
             let shim = ext
                 .iter()
-                .map(|[a, p]| Complex64::from_polar(*a, p * std::f64::consts::TAU))
+                .map(|[a, p]| Complex64::from_polar(*a, *p))
                 .collect();
             Ok(shim)
         }
