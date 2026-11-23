@@ -98,6 +98,10 @@ Useful CLI args:
 
 ## Changelog
 
+### 0.3.1
+
+- Fix: the phase of the official `rf_shims` extension is already given in rad and is no longer multiplied by 2π
+
 ### 0.3.0
 
 - Support rotation extension for all gradient combinations
